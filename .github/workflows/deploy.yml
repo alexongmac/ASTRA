@@ -1,0 +1,32 @@
+# .github/workflows/deploy.yml
+name: Deploy
+
+on:
+  push:
+    branches: [develop, main]
+
+jobs:
+  deploy-dev:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: ./deploy.sh
+        env:
+          API_URL: ${{ vars.API_URL }}
+          TOKEN: ${{ secrets.AWS_ROLE_ARN }}
+
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production   # pauses here for approval if reviewers are set
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: ./deploy.sh
+        env:
+          API_URL: ${{ vars.API_URL }}
+          TOKEN: ${{ secrets.AWS_ROLE_ARN }}
+
