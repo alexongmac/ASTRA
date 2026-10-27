@@ -1,41 +1,100 @@
-
 name: Terraform Deployment
 
 on:
   push:
     branches: [develop, main]
+    paths:
+      - "*.tf"
+      - "github-oidc-bootstrap/**.tf"
+      - "envs/**.tfvars"
+      - ".github/workflows/terraform-apply.yml"
 
 permissions:
-  id-token: write       # Required for OIDC
-  contents: read        # To read repo content
-
-# One Terraform run at a time (state locking is disabled in the backend)
-concurrency:
-  group: terraform-state
-  cancel-in-progress: false
+  id-token: write # Required for OIDC
+  contents: read # To read repo content
 
 jobs:
-  CICD:
+  plan:
     runs-on: ubuntu-latest
 
+    env:
+      ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+
+    # One Terraform run at a time PER ENVIRONMENT (state locking is disabled
+    # in the backend, and each env has its own state key) - a develop push
+    # and a main push must never block each other.
+    concurrency:
+      group: terraform-state-${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+      cancel-in-progress: false
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v7
-   
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v6
-      with:
-        role-to-assume: ${{ vars.OIDC_ROLE }}
-        aws-region: ${{ vars.AWS_REGION }}
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v4
-   
-    - name: Terraform Init
-      run: terraform init
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.OIDC_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
 
-    - name: Terraform Plan
-      run: terraform plan
-   
-    - name: Terraform Apply
-      run: terraform apply --auto-approve
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Init TFLint
+        run: tflint --init
+
+      - name: Run TFLint
+        run: tflint -f compact
+
+      - name: Terraform Plan
+        run: terraform plan -var-file="envs/${ENVIRONMENT}.tfvars"
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+
+    # Attaching a GitHub Environment named "production" to this job means
+    # that if the repo's Settings > Environments > production has required
+    # reviewers configured, this job pauses and waits for someone to click
+    # Approve before running `terraform apply`. The "development" environment
+    # has no reviewer requirement, so develop pushes apply immediately.
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+
+    env:
+      ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+
+    concurrency:
+      group: terraform-state-${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.OIDC_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -var-file="envs/${ENVIRONMENT}.tfvars"

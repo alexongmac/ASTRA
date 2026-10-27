@@ -16,6 +16,14 @@ crash.*.log
 *.tfvars
 *.tfvars.json
 
+# envs/*.tfvars only ever hold the non-secret `environment` string the CI
+# workflows need at terraform init/plan/apply time - track them.
+!envs/*.tfvars
+
+# terraform.tfvars only holds non-secret teammate usernames/IAM ARNs for
+# EKS cluster access (11-teamaccess.tf) - track it too.
+!terraform.tfvars
+
 # Ignore override files as they are usually used to override resources locally and so
 # are not checked in
 override.tf
