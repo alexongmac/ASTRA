@@ -107,19 +107,20 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
 
 =======================================================================================
 
-  helm upgrade --install cluster-autoscaler autoscaler/cluster-autoscaler \
-    --namespace kube-system \
-    --set autoDiscovery.clusterName="$CLUSTER_NAME" \
-    --set awsRegion="$REGION" \
-    --set serviceAccount.create=true \
-    --set serviceAccount.name=cluster-autoscaler \
-    --set resources.requests.cpu=25m \
-    --set resources.requests.memory=64Mi \
-    --set resources.limits.cpu=100m \
-    --set resources.limits.memory=128Mi \
-    --set extraArgs.balance-similar-node-groups=true \
-    --set extraArgs.skip-nodes-with-system-pods=false \
-    --wait --timeout 300s
+ helm upgrade --install cluster-autoscaler autoscaler/cluster-autoscaler \
+  --namespace kube-system \
+  --set autoDiscovery.clusterName=astra-eks-development-cluster \
+  --set awsRegion=us-east-1 \
+  --set rbac.serviceAccount.create=true \
+  --set rbac.serviceAccount.name=cluster-autoscaler \
+  --set resources.requests.cpu=25m \
+  --set resources.requests.memory=64Mi \
+  --set resources.limits.cpu=100m \
+  --set resources.limits.memory=128Mi \
+  --set extraArgs.balance-similar-node-groups=true \
+  --set extraArgs.skip-nodes-with-system-pods=false \
+  --wait --timeout 300s
+
 
 =======================================================================================
 
