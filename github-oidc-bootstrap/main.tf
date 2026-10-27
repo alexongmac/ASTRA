@@ -251,6 +251,7 @@ resource "aws_iam_role_policy" "s3_scoped" {
           "s3:GetBucketTagging",
           "s3:PutLifecycleConfiguration",
           "s3:GetLifecycleConfiguration",
+          "s3:GetBucketPolicy",
           "s3:PutObject",
           "s3:GetObject",
           "s3:DeleteObject",
@@ -296,6 +297,7 @@ resource "aws_iam_role_policy" "ecr_scoped" {
         "ecr:GetLifecyclePolicy",
         "ecr:TagResource",
         "ecr:UntagResource",
+        "ecr:ListTagsForResource",
       ]
       Resource = "arn:aws:ecr:*:*:repository/astra-*"
     }]
