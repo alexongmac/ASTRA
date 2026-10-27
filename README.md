@@ -42,7 +42,7 @@ helm repo add autoscaler https://kubernetes.github.io/autoscaler
 
 helm repo update
 
-=========================================================================================
+====================================
 VPC_ID=$(aws eks describe-cluster --name astra-eks-development-cluster --region us-east-1 \
   --query 'cluster.resourcesVpcConfig.vpcId' --output text)
 
@@ -59,7 +59,7 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --set resources.limits.memory=200Mi \
   --wait --timeout 600s
 
-===================================================================================
+====================================
 
   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
     --namespace ingress-nginx \
@@ -75,13 +75,13 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
     --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"=ip \
     --wait --timeout 600s
 
-=======================================================================================
+====================================
 
   helm upgrade --install metrics-server metrics-server/metrics-server \
     --namespace kube-system \
     --wait --timeout 300s
 
-=======================================================================================
+====================================
 
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
     --namespace monitoring \
@@ -105,7 +105,7 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
     --set kubeProxy.enabled=true \
     --wait --timeout 600s
 
-=======================================================================================
+====================================
 
  helm upgrade --install cluster-autoscaler autoscaler/cluster-autoscaler \
   --namespace kube-system \
@@ -121,8 +121,7 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
   --set extraArgs.skip-nodes-with-system-pods=false \
   --wait --timeout 300s
 
-
-=======================================================================================
+====================================
 
 helm upgrade --install loki grafana/loki \
   --version 7.5.0 \
@@ -131,4 +130,4 @@ helm upgrade --install loki grafana/loki \
   -f loki-values.yaml \
   --wait --timeout 600s
 
-=======================================================================================
+====================================
