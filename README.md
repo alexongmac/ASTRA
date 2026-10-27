@@ -43,6 +43,7 @@ helm repo add autoscaler https://kubernetes.github.io/autoscaler
 helm repo update
 
 ====================================
+
 VPC_ID=$(aws eks describe-cluster --name astra-eks-development-cluster --region us-east-1 \
   --query 'cluster.resourcesVpcConfig.vpcId' --output text)
 
@@ -121,6 +122,7 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
   --set extraArgs.skip-nodes-with-system-pods=false \
   --wait --timeout 300s
 
+
 ====================================
 
 helm upgrade --install loki grafana/loki \
@@ -129,5 +131,4 @@ helm upgrade --install loki grafana/loki \
   --create-namespace \
   -f loki-values.yaml \
   --wait --timeout 600s
-
 ====================================
