@@ -15,13 +15,18 @@ data "aws_iam_policy_document" "github_trust" {
       identifiers = [data.aws_iam_openid_connect_provider.github.arn]
     }
 
+    # This repo has GitHub's immutable OIDC subject claims setting enabled
+    # (Settings > Actions > General > Workflow permissions), so the `sub`
+    # claim GitHub issues is "repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:..."
+    # instead of the plain "repo:<owner>/<repo>:ref:...". Confirm via:
+    #   gh api repos/<owner>/<repo>/actions/oidc/customization/sub
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values = flatten([
         for name in var.github_repository_names : [
           for branch in var.github_allowed_branches :
-          "repo:${var.github_repository_username}/${name}:ref:refs/heads/${branch}"
+          "repo:${var.github_repository_username}@${var.github_owner_id}/${name}@${var.github_repo_ids[name]}:ref:refs/heads/${branch}"
         ]
       ])
     }
@@ -305,6 +310,19 @@ variable "github_repository_username" {
 variable "github_repository_names" {
   description = "GitHub repository names allowed to assume the role"
   type        = list(string)
+}
+
+# Required because this repo has GitHub's immutable OIDC subject claims
+# setting enabled - find both IDs with:
+#   gh api repos/<owner>/<repo> --jq '{owner_id: .owner.id, repo_id: .id}'
+variable "github_owner_id" {
+  description = "Numeric GitHub user/org ID of github_repository_username"
+  type        = number
+}
+
+variable "github_repo_ids" {
+  description = "Map of repository name (from github_repository_names) to its numeric GitHub repo ID"
+  type        = map(number)
 }
 
 variable "github_oidc_role_name" {
