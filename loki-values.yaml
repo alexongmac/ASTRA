@@ -1,0 +1,64 @@
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  storage:
+    type: s3
+    bucketNames:
+      chunks: astra-eks-development-loki-logs
+      ruler: astra-eks-development-loki-logs
+      admin: astra-eks-development-loki-logs
+    s3:
+      region: us-east-1
+      s3ForcePathStyle: false
+  serviceAccount:
+    create: true
+    name: loki
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: false
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 256Mi }
+
+# SingleBinary mode doesn't use the read/write/backend split - disable them
+# so the chart doesn't also deploy the SimpleScalable components.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+gateway:
+  enabled: false
+
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+test:
+  enabled: false
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+  selfMonitoring:
+    enabled: false
+
+lokiCanary:
+  enabled: false
