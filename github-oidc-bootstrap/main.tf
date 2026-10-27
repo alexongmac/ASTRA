@@ -20,15 +20,27 @@ data "aws_iam_policy_document" "github_trust" {
     # claim GitHub issues is "repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:..."
     # instead of the plain "repo:<owner>/<repo>:ref:...". Confirm via:
     #   gh api repos/<owner>/<repo>/actions/oidc/customization/sub
+    #
+    # A job that sets `environment:` (e.g. for the approval gate) gets a
+    # different sub claim shape - "...:environment:<name>" instead of
+    # "...:ref:refs/heads/<branch>" - so both forms must be trusted here.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values = flatten([
-        for name in var.github_repository_names : [
-          for branch in var.github_allowed_branches :
-          "repo:${var.github_repository_username}@${var.github_owner_id}/${name}@${var.github_repo_ids[name]}:ref:refs/heads/${branch}"
-        ]
-      ])
+      values = concat(
+        flatten([
+          for name in var.github_repository_names : [
+            for branch in var.github_allowed_branches :
+            "repo:${var.github_repository_username}@${var.github_owner_id}/${name}@${var.github_repo_ids[name]}:ref:refs/heads/${branch}"
+          ]
+        ]),
+        flatten([
+          for name in var.github_repository_names : [
+            for env in var.github_allowed_environments :
+            "repo:${var.github_repository_username}@${var.github_owner_id}/${name}@${var.github_repo_ids[name]}:environment:${env}"
+          ]
+        ])
+      )
     }
   }
 }
@@ -346,6 +358,16 @@ variable "github_allowed_branches" {
   description = "Branches allowed to assume the role (e.g. [\"main\", \"develop\"])"
   type        = list(string)
   default     = ["main", "develop"]
+}
+
+# GitHub Environment names (e.g. the ones referenced by a workflow job's
+# `environment:` field) allowed to assume the role, in addition to the
+# branches above - needed because a job with `environment:` set gets an
+# "...:environment:<name>" sub claim instead of "...:ref:refs/heads/<branch>".
+variable "github_allowed_environments" {
+  description = "GitHub Environment names allowed to assume the role (e.g. [\"production\", \"development\"])"
+  type        = list(string)
+  default     = ["production", "development"]
 }
 
 output "github_oidc_role_arn" {
