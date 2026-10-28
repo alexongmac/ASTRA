@@ -89,9 +89,9 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
     --set alertmanager.alertmanagerSpec.resources.limits.cpu=100m \
     --set alertmanager.alertmanagerSpec.resources.limits.memory=128Mi \
     --set grafana.resources.requests.cpu=50m \
-    --set grafana.resources.requests.memory=128Mi \
+    --set grafana.resources.requests.memory=256Mi \
     --set grafana.resources.limits.cpu=200m \
-    --set grafana.resources.limits.memory=256Mi \
+    --set grafana.resources.limits.memory=512Mi \
     --set kubeControllerManager.enabled=true \
     --set kubeScheduler.enabled=true \
     --set kubeEtcd.enabled=true \
@@ -123,4 +123,5 @@ helm upgrade --install loki grafana/loki \
   --create-namespace \
   -f loki-values.yaml \
   --wait --timeout 600s
+  
 ====================================
