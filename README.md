@@ -32,8 +32,6 @@ helm repo add eks https://aws.github.io/eks-charts
 
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 
-helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server
-
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
 helm repo add grafana https://grafana.github.io/helm-charts
@@ -75,12 +73,6 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
     --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"=internet-facing \
     --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"=ip \
     --wait --timeout 600s
-
-====================================
-
-  helm upgrade --install metrics-server metrics-server/metrics-server \
-    --namespace kube-system \
-    --wait --timeout 300s
 
 ====================================
 
