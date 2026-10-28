@@ -84,16 +84,21 @@ data "aws_iam_policy_document" "external_dns_route53" {
     actions = [
       "route53:ChangeResourceRecordSets",
       "route53:ListResourceRecordSets",
+      "route53:ListTagsForResource",
     ]
     resources = ["arn:aws:route53:::hostedzone/Z00541411T1NGPV97B5C0"]
   }
 
+  # sourcery-ignore: route53:ListHostedZones and ListHostedZonesByName are
+  # account-level list calls - AWS defines no resource-level ARN for them
+  # (see AWS's own Route 53 IAM reference), so "*" is not an over-grant here
+  # but the only value AWS's API accepts. The actual record read/write
+  # permissions above remain scoped to this one hosted zone only.
   statement {
     effect = "Allow"
     actions = [
       "route53:ListHostedZones",
       "route53:ListHostedZonesByName",
-      "route53:ListTagsForResource",
     ]
     resources = ["*"]
   }
