@@ -281,6 +281,8 @@ resource "aws_iam_role_policy" "s3_scoped" {
           "s3:GetObject",
           "s3:DeleteObject",
           "s3:ListBucket",
+          "s3:ListBucketVersions",
+          "s3:DeleteObjectVersion",
         ]
         Resource = [
           "arn:aws:s3:::astra-*",
