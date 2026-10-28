@@ -164,6 +164,8 @@ resource "aws_iam_role_policy" "networking" {
           "ec2:ModifyLaunchTemplate",
           "ec2:CreateTags",
           "ec2:DeleteTags",
+          "ec2:RunInstances",
+          "ec2:TerminateInstances",
         ]
         Resource = "*"
       },
