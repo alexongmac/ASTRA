@@ -32,8 +32,6 @@ helm repo add eks https://aws.github.io/eks-charts
 
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 
-helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server
-
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
 helm repo add grafana https://grafana.github.io/helm-charts
@@ -78,12 +76,6 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
 
 ====================================
 
-  helm upgrade --install metrics-server metrics-server/metrics-server \
-    --namespace kube-system \
-    --wait --timeout 300s
-
-====================================
-
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
     --namespace monitoring \
     --create-namespace \
@@ -97,9 +89,9 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
     --set alertmanager.alertmanagerSpec.resources.limits.cpu=100m \
     --set alertmanager.alertmanagerSpec.resources.limits.memory=128Mi \
     --set grafana.resources.requests.cpu=50m \
-    --set grafana.resources.requests.memory=128Mi \
+    --set grafana.resources.requests.memory=256Mi \
     --set grafana.resources.limits.cpu=200m \
-    --set grafana.resources.limits.memory=256Mi \
+    --set grafana.resources.limits.memory=512Mi \
     --set kubeControllerManager.enabled=true \
     --set kubeScheduler.enabled=true \
     --set kubeEtcd.enabled=true \
@@ -131,4 +123,5 @@ helm upgrade --install loki grafana/loki \
   --create-namespace \
   -f loki-values.yaml \
   --wait --timeout 600s
+  
 ====================================

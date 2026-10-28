@@ -31,10 +31,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # OIDC_ROLE differs per environment and isn't an Environment-scoped
+      # variable here: a job's `environment:` gates it on that Environment's
+      # approval rules, and plan must run unapproved so reviewers can see the
+      # diff before deciding whether to approve `apply`. So each env's role
+      # ARN is its own repo-level variable, selected by branch instead.
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.OIDC_ROLE }}
+          role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
@@ -87,7 +92,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.OIDC_ROLE }}
+          role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform

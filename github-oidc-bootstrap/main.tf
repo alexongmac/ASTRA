@@ -15,15 +15,32 @@ data "aws_iam_policy_document" "github_trust" {
       identifiers = [data.aws_iam_openid_connect_provider.github.arn]
     }
 
+    # This repo has GitHub's immutable OIDC subject claims setting enabled
+    # (Settings > Actions > General > Workflow permissions), so the `sub`
+    # claim GitHub issues is "repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:..."
+    # instead of the plain "repo:<owner>/<repo>:ref:...". Confirm via:
+    #   gh api repos/<owner>/<repo>/actions/oidc/customization/sub
+    #
+    # A job that sets `environment:` (e.g. for the approval gate) gets a
+    # different sub claim shape - "...:environment:<name>" instead of
+    # "...:ref:refs/heads/<branch>" - so both forms must be trusted here.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values = flatten([
-        for name in var.github_repository_names : [
-          for branch in var.github_allowed_branches :
-          "repo:${var.github_repository_username}/${name}:ref:refs/heads/${branch}"
-        ]
-      ])
+      values = concat(
+        flatten([
+          for name in var.github_repository_names : [
+            for branch in var.github_allowed_branches :
+            "repo:${var.github_repository_username}@${var.github_owner_id}/${name}@${var.github_repo_ids[name]}:ref:refs/heads/${branch}"
+          ]
+        ]),
+        flatten([
+          for name in var.github_repository_names : [
+            for env in var.github_allowed_environments :
+            "repo:${var.github_repository_username}@${var.github_owner_id}/${name}@${var.github_repo_ids[name]}:environment:${env}"
+          ]
+        ])
+      )
     }
   }
 }
@@ -246,6 +263,17 @@ resource "aws_iam_role_policy" "s3_scoped" {
           "s3:GetBucketTagging",
           "s3:PutLifecycleConfiguration",
           "s3:GetLifecycleConfiguration",
+          "s3:GetBucketPolicy",
+          "s3:GetBucketAcl",
+          "s3:GetBucketVersioning",
+          "s3:GetBucketLogging",
+          "s3:GetBucketWebsite",
+          "s3:GetBucketCORS",
+          "s3:GetBucketRequestPayment",
+          "s3:GetReplicationConfiguration",
+          "s3:GetBucketObjectLockConfiguration",
+          "s3:GetEncryptionConfiguration",
+          "s3:GetAccelerateConfiguration",
           "s3:PutObject",
           "s3:GetObject",
           "s3:DeleteObject",
@@ -291,6 +319,7 @@ resource "aws_iam_role_policy" "ecr_scoped" {
         "ecr:GetLifecyclePolicy",
         "ecr:TagResource",
         "ecr:UntagResource",
+        "ecr:ListTagsForResource",
       ]
       Resource = "arn:aws:ecr:*:*:repository/astra-*"
     }]
@@ -307,6 +336,19 @@ variable "github_repository_names" {
   type        = list(string)
 }
 
+# Required because this repo has GitHub's immutable OIDC subject claims
+# setting enabled - find both IDs with:
+#   gh api repos/<owner>/<repo> --jq '{owner_id: .owner.id, repo_id: .id}'
+variable "github_owner_id" {
+  description = "Numeric GitHub user/org ID of github_repository_username"
+  type        = number
+}
+
+variable "github_repo_ids" {
+  description = "Map of repository name (from github_repository_names) to its numeric GitHub repo ID"
+  type        = map(number)
+}
+
 variable "github_oidc_role_name" {
   description = "Name of the GitHub OIDC role"
   type        = string
@@ -316,6 +358,16 @@ variable "github_allowed_branches" {
   description = "Branches allowed to assume the role (e.g. [\"main\", \"develop\"])"
   type        = list(string)
   default     = ["main", "develop"]
+}
+
+# GitHub Environment names (e.g. the ones referenced by a workflow job's
+# `environment:` field) allowed to assume the role, in addition to the
+# branches above - needed because a job with `environment:` set gets an
+# "...:environment:<name>" sub claim instead of "...:ref:refs/heads/<branch>".
+variable "github_allowed_environments" {
+  description = "GitHub Environment names allowed to assume the role (e.g. [\"production\", \"development\"])"
+  type        = list(string)
+  default     = ["production", "development"]
 }
 
 output "github_oidc_role_arn" {

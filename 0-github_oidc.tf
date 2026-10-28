@@ -6,6 +6,11 @@ module "github_oidc_bootstrap" {
   github_repository_names    = ["ASTRA"]
   github_oidc_role_name      = "${local.eks_name}-github-oidc-role"
   github_allowed_branches    = ["main", "develop"]
+  # gh api repos/alexongmac/ASTRA --jq '{owner_id: .owner.id, repo_id: .id}'
+  github_owner_id = 54748360
+  github_repo_ids = {
+    ASTRA = 1364155602
+  }
 }
 
 resource "aws_iam_role_policy" "github_oidc_policy" {

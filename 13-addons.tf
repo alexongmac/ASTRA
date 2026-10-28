@@ -27,3 +27,31 @@ resource "aws_eks_addon" "metrics_server" {
   depends_on = [aws_eks_node_group.general]
 }
 
+resource "aws_eks_addon" "cert_manager" {
+  cluster_name = aws_eks_cluster.eks.name
+  addon_name   = "cert-manager"
+
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [aws_eks_node_group.general]
+
+}
+
+resource "aws_eks_addon" "node_monitoring_agent" {
+  cluster_name = aws_eks_cluster.eks.name
+  addon_name   = "eks-node-monitoring-agent"
+
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [aws_eks_node_group.general]
+}
+
+resource "aws_eks_addon" "ext_dns" {
+  cluster_name = aws_eks_cluster.eks.name
+  addon_name   = "external-dns"
+
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [aws_eks_node_group.general]
+}
+
