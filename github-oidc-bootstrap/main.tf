@@ -110,6 +110,7 @@ resource "aws_iam_role_policy" "eks" {
         "eks:DeleteAccessEntry",
         "eks:DescribeAccessEntry",
         "eks:ListAccessEntries",
+        "eks:UpdateAccessEntry",
         "eks:AssociateAccessPolicy",
         "eks:DisassociateAccessPolicy",
         "eks:ListAssociatedAccessPolicies",
