@@ -132,6 +132,12 @@ kubectl apply -f clusterissuer.yaml -f grafana-ingress.yaml -f prometheus-ingres
 
 ====================================
 
+## Register Loki as a Grafana datasource (kube-prometheus-stack's Grafana doesn't auto-detect the separate Loki Helm release)
+
+kubectl apply -f loki-datasource.yaml
+
+====================================
+
 ## Apply custom RBAC roles (developer, sre) for teammates mapped via kubernetes_groups in terraform.tfvars
 
 kubectl apply -f rbac.yaml
