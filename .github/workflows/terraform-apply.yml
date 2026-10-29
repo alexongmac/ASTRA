@@ -36,10 +36,14 @@ jobs:
       # approval rules, and plan must run unapproved so reviewers can see the
       # diff before deciding whether to approve `apply`. So each env's role
       # ARN is its own repo-level variable, selected by branch instead.
+      # TEMPORARY: development's OIDC role was deleted by a prior destroy, so
+      # there's nothing for OIDC to assume. Bootstrapping it back requires a
+      # real credential just this once; revert to role-to-assume afterward.
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_BOOTSTRAP }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_BOOTSTRAP }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
@@ -89,10 +93,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # TEMPORARY: see matching note in the plan job above.
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_BOOTSTRAP }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_BOOTSTRAP }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
