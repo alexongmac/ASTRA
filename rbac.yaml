@@ -1,0 +1,83 @@
+# Custom RBAC roles for teammates whose IAM access entry (11-teamaccess.tf)
+# maps them into one of the kubernetes_groups bound below, instead of an AWS
+# managed cluster-access-policy. Apply with: kubectl apply -f rbac.yaml
+#
+# admin -> alexongmac uses the AWS managed AmazonEKSClusterAdminPolicy
+# directly (11-teamaccess.tf), which is equivalent to Kubernetes' built-in
+# cluster-admin ClusterRole, so no custom role is defined for it here.
+
+# developer: manage workloads in the default namespace, read-only on
+# Secrets, no access to RBAC or ResourceQuotas.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: developer
+rules:
+  - apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+    resources:
+      - pods
+      - pods/log
+      - pods/exec
+      - services
+      - configmaps
+      - deployments
+      - replicasets
+      - statefulsets
+      - jobs
+      - cronjobs
+      - ingresses
+      - endpoints
+      - events
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eks-developers-binding
+  namespace: default
+subjects:
+  - kind: Group
+    name: eks-developers
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: developer
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# sre: cluster-wide read on everything plus the operational actions needed
+# to debug/mitigate incidents (logs, exec, scale, restart via patch on
+# deployments/statefulsets) - no RBAC or namespace management.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sre
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/exec"]
+    verbs: ["get", "create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale", "statefulsets", "statefulsets/scale"]
+    verbs: ["patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: eks-sres-binding
+subjects:
+  - kind: Group
+    name: eks-sres
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: sre
+  apiGroup: rbac.authorization.k8s.io

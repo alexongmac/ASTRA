@@ -125,3 +125,13 @@ helm upgrade --install loki grafana/loki \
   --wait --timeout 600s
   
 ====================================
+
+## Then launch 3 values yaml file for CA to be assigned to the domain . Wait for 5 mins before launching https://astra-prom.sctp-sandbox.com and https://astra-grafana.sctp-sandbox.com  
+
+kubectl apply -f clusterissuer.yaml -f grafana-ingress.yaml -f prometheus-ingress.yaml
+
+====================================
+
+## Apply custom RBAC roles (developer, sre) for teammates mapped via kubernetes_groups in terraform.tfvars
+
+kubectl apply -f rbac.yaml
