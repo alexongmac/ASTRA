@@ -128,7 +128,7 @@ helm upgrade --install loki grafana/loki \
 
 ## Then launch 3 values yaml file for CA to be assigned to the domain . Wait for 5 mins before launching https://astra-prom.sctp-sandbox.com and https://astra-grafana.sctp-sandbox.com  
 
-kubectl apply -f clusterissuer.yaml -f grafana-ingress.yaml -f prometheus-ingress.yaml
+kubectl apply -f clusterissuer.yaml -f grafana-ingress.yaml -f prometheus-ingress.yaml -f alertmanager-ingress.yaml
 
 ====================================
 
