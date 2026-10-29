@@ -6,8 +6,10 @@
 # directly (11-teamaccess.tf), which is equivalent to Kubernetes' built-in
 # cluster-admin ClusterRole, so no custom role is defined for it here.
 
-# developer: manage workloads in the default namespace, read-only on
-# Secrets, no access to RBAC or ResourceQuotas.
+# developer: manage workloads in the default namespace, including what a
+# `helm install/upgrade` into that namespace needs to create (secrets,
+# serviceaccounts, pvcs, and namespace-scoped RBAC that charts ship for
+# their own pods) - no access to ResourceQuotas or cluster-scoped RBAC.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -20,18 +22,22 @@ rules:
       - pods/exec
       - services
       - configmaps
+      - secrets
+      - serviceaccounts
+      - persistentvolumeclaims
       - deployments
       - replicasets
       - statefulsets
+      - daemonsets
       - jobs
       - cronjobs
       - ingresses
       - endpoints
       - events
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
