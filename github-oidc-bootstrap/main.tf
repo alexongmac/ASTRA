@@ -54,9 +54,9 @@ resource "aws_iam_role" "github_oidc" {
   # itself, mid-run) loses the only credential it has, and recreating it
   # requires a one-time manual bootstrap with real AWS credentials. Refuse
   # to destroy this one resource so that scenario can't happen again.
-#   lifecycle {
-#     prevent_destroy = true
-#   }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # No managed policies attached directly: every permission this role needs

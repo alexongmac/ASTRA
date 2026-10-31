@@ -64,6 +64,14 @@ jobs:
       - name: Run TFLint
         run: tflint -f compact
 
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          quiet: true
+          soft_fail: true
+
       - name: Terraform Plan
         run: terraform plan -var-file="envs/${ENVIRONMENT}.tfvars"
 

@@ -43,6 +43,22 @@ helm repo update
 
 ====================================
 
+  helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+    --namespace ingress-nginx \
+    --create-namespace \
+    --set controller.replicaCount=2 \
+    --set controller.resources.requests.cpu=50m \
+    --set controller.resources.requests.memory=90Mi \
+    --set controller.resources.limits.cpu=200m \
+    --set controller.resources.limits.memory=180Mi \
+    --set controller.service.type=LoadBalancer \
+    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"=nlb \
+    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"=internet-facing \
+    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"=ip \
+    --wait --timeout 600s
+
+====================================
+
 VPC_ID=$(aws eks describe-cluster --name astra-eks-development-cluster --region us-east-1 \
   --query 'cluster.resourcesVpcConfig.vpcId' --output text)
 
@@ -58,22 +74,6 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --set resources.limits.cpu=200m \
   --set resources.limits.memory=200Mi \
   --wait --timeout 600s
-
-====================================
-
-  helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-    --namespace ingress-nginx \
-    --create-namespace \
-    --set controller.replicaCount=2 \
-    --set controller.resources.requests.cpu=50m \
-    --set controller.resources.requests.memory=90Mi \
-    --set controller.resources.limits.cpu=200m \
-    --set controller.resources.limits.memory=180Mi \
-    --set controller.service.type=LoadBalancer \
-    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"=nlb \
-    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"=internet-facing \
-    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-nlb-target-type"=ip \
-    --wait --timeout 600s
 
 ====================================
 
