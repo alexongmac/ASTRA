@@ -48,6 +48,15 @@ data "aws_iam_policy_document" "github_trust" {
 resource "aws_iam_role" "github_oidc" {
   name               = var.github_oidc_role_name
   assume_role_policy = data.aws_iam_policy_document.github_trust.json
+
+  # CI authenticates to AWS solely by assuming this role via OIDC - if a
+  # destroy ever deletes it, every future CI run (including the destroy
+  # itself, mid-run) loses the only credential it has, and recreating it
+  # requires a one-time manual bootstrap with real AWS credentials. Refuse
+  # to destroy this one resource so that scenario can't happen again.
+#   lifecycle {
+#     prevent_destroy = true
+#   }
 }
 
 # No managed policies attached directly: every permission this role needs
@@ -63,6 +72,13 @@ resource "aws_iam_role" "github_oidc" {
 resource "aws_iam_role_policy" "eks" {
   name = "eks-cluster-management"
   role = aws_iam_role.github_oidc.name
+
+  # See the prevent_destroy note on aws_iam_role.github_oidc - a destroy
+  # deleting this role's own inline policies mid-run is what caused it to
+  # lose S3 state-bucket access partway through a prior destroy.
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -94,6 +110,7 @@ resource "aws_iam_role_policy" "eks" {
         "eks:DeleteAccessEntry",
         "eks:DescribeAccessEntry",
         "eks:ListAccessEntries",
+        "eks:UpdateAccessEntry",
         "eks:AssociateAccessPolicy",
         "eks:DisassociateAccessPolicy",
         "eks:ListAssociatedAccessPolicies",
@@ -115,6 +132,10 @@ resource "aws_iam_role_policy" "eks" {
 resource "aws_iam_role_policy" "networking" {
   name = "vpc-networking-management"
   role = aws_iam_role.github_oidc.name
+
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -194,6 +215,10 @@ resource "aws_iam_role_policy" "iam_scoped" {
   name = "iam-stack-management"
   role = aws_iam_role.github_oidc.name
 
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -253,6 +278,10 @@ resource "aws_iam_role_policy" "s3_scoped" {
   name = "s3-stack-management"
   role = aws_iam_role.github_oidc.name
 
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -310,6 +339,10 @@ resource "aws_iam_role_policy" "s3_scoped" {
 resource "aws_iam_role_policy" "ecr_scoped" {
   name = "ecr-stack-management"
   role = aws_iam_role.github_oidc.name
+
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   policy = jsonencode({
     Version = "2012-10-17"

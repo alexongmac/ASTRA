@@ -1,16 +1,16 @@
-# Notes
+### Notes
 
 ### one-time setup, after provider.tf changes
  - terraform init -reconfigure
 
 ### day to day
 - terraform init -backend-config="key=astra/development.tfstate"
-- terraform apply -var-file=envs/development.tfvars
+- terraform init -backend-config="key=astra/development.tfstate"
 
-- 
+- terraform apply -var-file=envs/development.tfvars
 - terraform apply -var-file=envs/production.tfvars
 
-### State files will land at:
+### State files will land at s3 bucket:
 - astra-env/dev/astra/terraform.tfstate
 - astra-env/prod/astra/terraform.tfstate
 
@@ -18,7 +18,8 @@
 ### Terraform Destroy
 
 please take note of the git branch must be in "develop"
-- terraform destroy -auto-approve -var-file="envs/development.tfvars
+
+terraform destroy -auto-approve -var-file="envs/development.tfvars
 
 ### Helm Installation
 
@@ -114,7 +115,6 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
   --set extraArgs.skip-nodes-with-system-pods=false \
   --wait --timeout 300s
 
-
 ====================================
 
 helm upgrade --install loki grafana/loki \
@@ -125,3 +125,70 @@ helm upgrade --install loki grafana/loki \
   --wait --timeout 600s
   
 ====================================
+
+### Get Grafana 'admin' user password by running:
+
+  kubectl --namespace monitoring get secrets kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
+
+### Then launch 3 values yaml file for CA to be assigned to the domain . Wait for 5 mins before launching https://astra-prom.sctp-sandbox.com and https://astra-grafana.sctp-sandbox.com  
+
+kubectl apply -f clusterissuer.yaml -f grafana-ingress.yaml -f prometheus-ingress.yaml -f alertmanager-ingress.yaml
+
+====================================
+
+### Register Loki as a Grafana datasource (kube-prometheus-stack's Grafana doesn't auto-detect the separate Loki Helm release)
+
+kubectl apply -f loki-datasource.yaml
+
+====================================
+
+### Apply custom RBAC roles (developer, sre) for teammates mapped via kubernetes_groups in terraform.tfvars
+
+kubectl apply -f rbac.yaml
+
+### CloudWatch for audit logging who did what, when, via the K8s API
+
+1. Go to CloudWatch -> Log groups
+
+2. Find /aws/eks/astra-eks-development-cluster/cluster (or -production-)
+
+3. Inside it you'll see separate log streams per log type: kube-apiserver-audit-..., kube-apiserver-... (since you enabled api and audit)
+
+4. Click a stream to view entries, or use Logs Insights to run queries across all streams in the group
+
+### via AWS CLI
+
+aws logs describe-log-streams \
+  --log-group-name /aws/eks/astra-eks-development-cluster/cluster \
+  --region us-east-1
+
+aws logs tail /aws/eks/astra-eks-development-cluster/cluster --follow --region us-east-1
+
+aws logs start-query \
+  --log-group-name /aws/eks/astra-eks-development-cluster/cluster \
+  --start-time $(date -v-1H +%s) \
+  --end-time $(date +%s) \
+  --query-string 'fields @timestamp, @message | filter @logStream like /audit/ | sort @timestamp desc | limit 20' \
+  --region us-east-1
+
+Then fetch results with 
+
+aws logs get-query-results --query-id <id>.  
+
+### some of the aws eks command:
+
+- aws eks update-kubeconfig --region us-east-1 --name astra-eks-development-cluster --profile <username>
+
+- aws eks describe-cluster --name astra-eks-development-cluster --output json  
+
+- kubectl api-resources
+
+- kubectl cluster-info dump
+
+### Uninstall in reverse dependency order — ingress/LB stuff first, before Terraform Destroy
+### since they're what blocked  (NLB, ENIs, target groups)
+helm uninstall ingress-nginx -n ingress-nginx
+helm uninstall kube-prometheus-stack -n monitoring
+helm uninstall loki -n monitoring
+helm uninstall cluster-autoscaler -n kube-system
+helm uninstall aws-load-balancer-controller -n kube-system

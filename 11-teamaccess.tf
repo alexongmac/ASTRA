@@ -8,24 +8,34 @@
 #   terraform import 'aws_eks_access_entry.teammates["<name>"]' \
 #     '<cluster-name>:<principal-arn>'
 #   terraform import 'aws_eks_access_policy_association.teammates_admin["<name>"]' \
-#     '<cluster-name>#<principal-arn>#arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy'
-variable "teammate_principal_arns" {
-  description = "Map of teammate name to IAM principal ARN to grant EKS cluster admin access"
-  type        = map(string)
-  default     = {}
+#     '<cluster-name>#<principal-arn>#arn:aws:eks::aws:cluster-access-policy/<policy-name-from-tfvars>'
+variable "teammates" {
+  description = "Map of teammate name to IAM principal ARN, optional AWS managed EKS policy, and optional Kubernetes RBAC groups"
+  type = map(object({
+    principal_arn = string
+    # One of the AWS managed cluster-access-policy names (AmazonEKSClusterAdminPolicy,
+    # AmazonEKSAdminPolicy, AmazonEKSEditPolicy, AmazonEKSViewPolicy), or null to rely
+    # solely on kubernetes_groups below for custom RBAC (see rbac.yaml).
+    policy = optional(string)
+    # Kubernetes groups this principal authenticates as - bind these to
+    # ClusterRole(Binding)s/RoleBindings in rbac.yaml for custom RBAC.
+    kubernetes_groups = optional(list(string), [])
+  }))
+  default = {}
 }
 
 resource "aws_eks_access_entry" "teammates" {
-  for_each      = var.teammate_principal_arns
-  cluster_name  = aws_eks_cluster.eks.name
-  principal_arn = each.value
+  for_each          = var.teammates
+  cluster_name      = aws_eks_cluster.eks.name
+  principal_arn     = each.value.principal_arn
+  kubernetes_groups = each.value.kubernetes_groups
 }
 
 resource "aws_eks_access_policy_association" "teammates_admin" {
-  for_each      = var.teammate_principal_arns
+  for_each      = { for name, t in var.teammates : name => t if t.policy != null }
   cluster_name  = aws_eks_cluster.eks.name
-  principal_arn = each.value
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = each.value.principal_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/${each.value.policy}"
 
   access_scope {
     type = "cluster"

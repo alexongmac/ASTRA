@@ -17,6 +17,13 @@ resource "aws_iam_role_policy" "github_oidc_policy" {
   name = "terraform-self-read-policy"
   role = module.github_oidc_bootstrap.github_oidc_role_name
 
+  # See the prevent_destroy note on the OIDC role in github-oidc-bootstrap -
+  # this role's own inline policies must survive a destroy or CI loses its
+  # only AWS credential mid-run.
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
