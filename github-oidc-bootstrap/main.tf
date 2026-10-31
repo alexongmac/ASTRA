@@ -392,15 +392,23 @@ resource "aws_iam_role_policy" "iot_scoped" {
           "iot:GetPolicy",
           "iot:ListPolicyVersions",
           "iot:ListTargetsForPolicy",
+          "iot:ListTagsForResource",
         ]
         Resource = "arn:aws:iot:*:*:policy/*"
+      },
+      {
+        Sid    = "IotCertificateCreate"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateCertificateFromCsr",
+          "iot:CreateKeysAndCertificate",
+        ]
+        Resource = "*"
       },
       {
         Sid    = "IotCertificateManage"
         Effect = "Allow"
         Action = [
-          "iot:CreateCertificateFromCsr",
-          "iot:CreateKeysAndCertificate",
           "iot:DeleteCertificate",
           "iot:DescribeCertificate",
           "iot:UpdateCertificate",
