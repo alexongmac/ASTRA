@@ -365,6 +365,72 @@ resource "aws_iam_role_policy" "ecr_scoped" {
   })
 }
 
+resource "aws_iam_role_policy" "iot_scoped" {
+  name = "iot-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "IotThingManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateThing",
+          "iot:DeleteThing",
+          "iot:DescribeThing",
+          "iot:UpdateThing",
+        ]
+        Resource = "arn:aws:iot:*:*:thing/*"
+      },
+      {
+        Sid    = "IotPolicyManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreatePolicy",
+          "iot:DeletePolicy",
+          "iot:GetPolicy",
+          "iot:ListPolicyVersions",
+          "iot:ListTargetsForPolicy",
+        ]
+        Resource = "arn:aws:iot:*:*:policy/*"
+      },
+      {
+        Sid    = "IotCertificateManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateCertificateFromCsr",
+          "iot:CreateKeysAndCertificate",
+          "iot:DeleteCertificate",
+          "iot:DescribeCertificate",
+          "iot:UpdateCertificate",
+        ]
+        Resource = "arn:aws:iot:*:*:cert/*"
+      },
+      {
+        Sid    = "IotAttachmentManage"
+        Effect = "Allow"
+        Action = [
+          "iot:AttachPolicy",
+          "iot:DetachPolicy",
+          "iot:AttachThingPrincipal",
+          "iot:DetachThingPrincipal",
+          "iot:ListAttachedPolicies",
+          "iot:ListThingPrincipals",
+          "iot:ListPrincipalThings",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "IotEndpointRead"
+        Effect   = "Allow"
+        Action   = "iot:DescribeEndpoint"
+        Resource = "*"
+      },
+    ]
+  })
+}
+
 variable "github_repository_username" {
   description = "GitHub repository username"
   type        = string
