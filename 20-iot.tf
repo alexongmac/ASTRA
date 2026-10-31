@@ -9,9 +9,9 @@ resource "aws_iot_policy" "raspberry_pi" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "Connect"
-        Effect = "Allow"
-        Action = "iot:Connect"
+        Sid      = "Connect"
+        Effect   = "Allow"
+        Action   = "iot:Connect"
         Resource = "arn:aws:iot:${local.region}:${data.aws_caller_identity.current.account_id}:client/${local.mqtt_client_id}"
       },
       {
