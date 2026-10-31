@@ -9,4 +9,7 @@ locals {
   zone2       = "us-east-1b"
   eks_name    = "astra-eks-${var.environment}"
   eks_version = "1.37"
+  thing_name = "nodered-bridge"
+  mqtt_client_id = "mosquitto-bridge"
+  mqtt_topic_prefix = "nodered"
 }

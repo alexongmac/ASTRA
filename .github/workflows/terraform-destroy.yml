@@ -39,6 +39,25 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Update kubeconfig
+        continue-on-error: true
+        run: aws eks update-kubeconfig --region "${{ vars.AWS_REGION }}" --name "astra-eks-${ENVIRONMENT}-cluster"
+
+      - name: Helm uninstall releases (best-effort)
+        continue-on-error: true
+        run: |
+          helm uninstall ingress-nginx -n ingress-nginx || true
+          helm uninstall kube-prometheus-stack -n monitoring || true
+          helm uninstall loki -n monitoring || true
+          helm uninstall cluster-autoscaler -n kube-system || true
+          helm uninstall aws-load-balancer-controller -n kube-system || true
+
       - name: Terraform Init
         run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
 
