@@ -187,8 +187,50 @@ aws logs get-query-results --query-id <id>.
 
 ### Uninstall in reverse dependency order — ingress/LB stuff first, before Terraform Destroy
 ### since they're what blocked  (NLB, ENIs, target groups)
+
 helm uninstall ingress-nginx -n ingress-nginx
 helm uninstall kube-prometheus-stack -n monitoring
 helm uninstall loki -n monitoring
 helm uninstall cluster-autoscaler -n kube-system
 helm uninstall aws-load-balancer-controller -n kube-system
+
+### ArgoCD Installation
+
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml   
+
+### Check ArgoCD is installed
+
+kubectl get all -n argocd
+kubectl get pods -n argocd
+
+### to get the secrets 
+
+kubectl get secret -n argocd
+kubectl get secret -n argocd argocd-initial-admin-secret -o yaml
+echo 'bbbbbbbbbbbbb' | base64 -d
+
+### Use this command to access ArgoCD on your local machine on port 8080
+
+kubectl get svc -n argocd
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+open browser type: localhost:8080/
+
+### Enter Username and password
+
+Username: admin
+password : xxxxxxxxxxx
+
+### To interact with ArgoCD,  Install argocd cli
+
+brew install argocd 
+
+or refer to documentation
+
+https://argo-cd.readthedocs.io/en/stable/cli_installation/
+
+
+
+
+
+

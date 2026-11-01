@@ -58,6 +58,12 @@ jobs:
           helm uninstall cluster-autoscaler -n kube-system || true
           helm uninstall aws-load-balancer-controller -n kube-system || true
 
+      - name: Uninstall ArgoCD (best-effort)
+        continue-on-error: true
+        run: |
+          kubectl delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || true
+          kubectl delete namespace argocd || true
+
       - name: Terraform Init
         run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
 
