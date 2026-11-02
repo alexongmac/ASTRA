@@ -432,8 +432,12 @@ resource "aws_iam_role_policy" "rds_scoped" {
         Effect = "Allow"
         Action = [
           "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:ReEncryptFrom",
+          "kms:ReEncryptTo",
           "kms:GenerateDataKey",
           "kms:CreateGrant",
+          "kms:DescribeKey",
         ]
         Resource = "*"
         Condition = {
