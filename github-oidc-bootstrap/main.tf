@@ -264,6 +264,7 @@ resource "aws_iam_role_policy" "iam_scoped" {
         ]
         Resource = [
           "arn:aws:iam::*:role/astra-eks-*",
+          "arn:aws:iam::*:role/astra-rds-*",
           "arn:aws:iam::*:role/${var.github_oidc_role_name}",
           "arn:aws:iam::*:policy/astra-eks-*",
         ]
@@ -312,6 +313,10 @@ resource "aws_iam_role_policy" "s3_scoped" {
           "s3:ListBucket",
           "s3:ListBucketVersions",
           "s3:DeleteObjectVersion",
+          "s3:PutBucketPublicAccessBlock",
+          "s3:GetBucketPublicAccessBlock",
+          "s3:PutBucketVersioning",
+          "s3:PutEncryptionConfiguration",
         ]
         Resource = [
           "arn:aws:s3:::astra-*",
@@ -362,6 +367,58 @@ resource "aws_iam_role_policy" "ecr_scoped" {
       ]
       Resource = "arn:aws:ecr:*:*:repository/astra-*"
     }]
+  })
+}
+
+# RDS instance/subnet-group management for the stack's MySQL database,
+# plus read access to the Secrets Manager secret that RDS auto-creates
+# when manage_master_user_password is enabled (Terraform reads it back
+# into state after creation).
+resource "aws_iam_role_policy" "rds_scoped" {
+  name = "rds-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RdsInstanceManage"
+        Effect = "Allow"
+        Action = [
+          "rds:CreateDBInstance",
+          "rds:DeleteDBInstance",
+          "rds:ModifyDBInstance",
+          "rds:DescribeDBInstances",
+          "rds:AddTagsToResource",
+          "rds:RemoveTagsFromResource",
+          "rds:ListTagsForResource",
+        ]
+        Resource = "arn:aws:rds:*:*:db:astra-*"
+      },
+      {
+        Sid    = "RdsSubnetGroupManage"
+        Effect = "Allow"
+        Action = [
+          "rds:CreateDBSubnetGroup",
+          "rds:DeleteDBSubnetGroup",
+          "rds:ModifyDBSubnetGroup",
+          "rds:DescribeDBSubnetGroups",
+          "rds:AddTagsToResource",
+          "rds:RemoveTagsFromResource",
+          "rds:ListTagsForResource",
+        ]
+        Resource = "arn:aws:rds:*:*:subgrp:astra-*"
+      },
+      {
+        Sid    = "RdsManagedSecretRead"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+        ]
+        Resource = "arn:aws:secretsmanager:*:*:secret:rds!db-*"
+      },
+    ]
   })
 }
 
