@@ -13,6 +13,8 @@ resource "aws_eks_cluster" "eks" {
     bootstrap_cluster_creator_admin_permissions = true
   }
 
+  enabled_cluster_log_types = ["api", "audit"]
+
   vpc_config {
     endpoint_private_access = true
     endpoint_public_access  = true

@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: astra-grafana
+  namespace: monitoring
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    external-dns.kubernetes.io/hostname: astra-grafana.sctp-sandbox.com
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - astra-grafana.sctp-sandbox.com
+      secretName: astra-grafana-tls
+  rules:
+    - host: astra-grafana.sctp-sandbox.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kube-prometheus-stack-grafana
+                port:
+                  number: 80

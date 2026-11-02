@@ -48,6 +48,15 @@ data "aws_iam_policy_document" "github_trust" {
 resource "aws_iam_role" "github_oidc" {
   name               = var.github_oidc_role_name
   assume_role_policy = data.aws_iam_policy_document.github_trust.json
+
+  # CI authenticates to AWS solely by assuming this role via OIDC - if a
+  # destroy ever deletes it, every future CI run (including the destroy
+  # itself, mid-run) loses the only credential it has, and recreating it
+  # requires a one-time manual bootstrap with real AWS credentials. Refuse
+  # to destroy this one resource so that scenario can't happen again.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # No managed policies attached directly: every permission this role needs
@@ -63,6 +72,13 @@ resource "aws_iam_role" "github_oidc" {
 resource "aws_iam_role_policy" "eks" {
   name = "eks-cluster-management"
   role = aws_iam_role.github_oidc.name
+
+  # See the prevent_destroy note on aws_iam_role.github_oidc - a destroy
+  # deleting this role's own inline policies mid-run is what caused it to
+  # lose S3 state-bucket access partway through a prior destroy.
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -94,6 +110,7 @@ resource "aws_iam_role_policy" "eks" {
         "eks:DeleteAccessEntry",
         "eks:DescribeAccessEntry",
         "eks:ListAccessEntries",
+        "eks:UpdateAccessEntry",
         "eks:AssociateAccessPolicy",
         "eks:DisassociateAccessPolicy",
         "eks:ListAssociatedAccessPolicies",
@@ -115,6 +132,10 @@ resource "aws_iam_role_policy" "eks" {
 resource "aws_iam_role_policy" "networking" {
   name = "vpc-networking-management"
   role = aws_iam_role.github_oidc.name
+
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -164,6 +185,8 @@ resource "aws_iam_role_policy" "networking" {
           "ec2:ModifyLaunchTemplate",
           "ec2:CreateTags",
           "ec2:DeleteTags",
+          "ec2:RunInstances",
+          "ec2:TerminateInstances",
         ]
         Resource = "*"
       },
@@ -192,6 +215,10 @@ resource "aws_iam_role_policy" "iam_scoped" {
   name = "iam-stack-management"
   role = aws_iam_role.github_oidc.name
 
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -203,6 +230,7 @@ resource "aws_iam_role_policy" "iam_scoped" {
           "iam:GetRolePolicy",
           "iam:ListRolePolicies",
           "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole",
           "iam:ListOpenIDConnectProviders",
           "iam:GetOpenIDConnectProvider",
           "iam:GetPolicy",
@@ -250,6 +278,10 @@ resource "aws_iam_role_policy" "s3_scoped" {
   name = "s3-stack-management"
   role = aws_iam_role.github_oidc.name
 
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -278,6 +310,8 @@ resource "aws_iam_role_policy" "s3_scoped" {
           "s3:GetObject",
           "s3:DeleteObject",
           "s3:ListBucket",
+          "s3:ListBucketVersions",
+          "s3:DeleteObjectVersion",
         ]
         Resource = [
           "arn:aws:s3:::astra-*",
@@ -306,6 +340,10 @@ resource "aws_iam_role_policy" "ecr_scoped" {
   name = "ecr-stack-management"
   role = aws_iam_role.github_oidc.name
 
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -317,12 +355,87 @@ resource "aws_iam_role_policy" "ecr_scoped" {
         "ecr:DescribeRepositories",
         "ecr:PutLifecyclePolicy",
         "ecr:GetLifecyclePolicy",
+        "ecr:DeleteLifecyclePolicy",
         "ecr:TagResource",
         "ecr:UntagResource",
         "ecr:ListTagsForResource",
       ]
       Resource = "arn:aws:ecr:*:*:repository/astra-*"
     }]
+  })
+}
+
+resource "aws_iam_role_policy" "iot_scoped" {
+  name = "iot-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "IotThingManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateThing",
+          "iot:DeleteThing",
+          "iot:DescribeThing",
+          "iot:UpdateThing",
+        ]
+        Resource = "arn:aws:iot:*:*:thing/*"
+      },
+      {
+        Sid    = "IotPolicyManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreatePolicy",
+          "iot:DeletePolicy",
+          "iot:GetPolicy",
+          "iot:ListPolicyVersions",
+          "iot:ListTargetsForPolicy",
+          "iot:ListTagsForResource",
+        ]
+        Resource = "arn:aws:iot:*:*:policy/*"
+      },
+      {
+        Sid    = "IotCertificateCreate"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateCertificateFromCsr",
+          "iot:CreateKeysAndCertificate",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "IotCertificateManage"
+        Effect = "Allow"
+        Action = [
+          "iot:DeleteCertificate",
+          "iot:DescribeCertificate",
+          "iot:UpdateCertificate",
+        ]
+        Resource = "arn:aws:iot:*:*:cert/*"
+      },
+      {
+        Sid    = "IotAttachmentManage"
+        Effect = "Allow"
+        Action = [
+          "iot:AttachPolicy",
+          "iot:DetachPolicy",
+          "iot:AttachThingPrincipal",
+          "iot:DetachThingPrincipal",
+          "iot:ListAttachedPolicies",
+          "iot:ListThingPrincipals",
+          "iot:ListPrincipalThings",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "IotEndpointRead"
+        Effect   = "Allow"
+        Action   = "iot:DescribeEndpoint"
+        Resource = "*"
+      },
+    ]
   })
 }
 
