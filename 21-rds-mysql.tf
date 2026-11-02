@@ -26,8 +26,11 @@ resource "aws_db_instance" "mysql" {
   db_name                     = "astradb"
   username                    = "dbadmin"
   manage_master_user_password = true # Auto-generates & manages credentials in Secrets Manager
-  db_subnet_group_name        = aws_db_subnet_group.rds.name
-  skip_final_snapshot         = true
+  # Explicit because this account's default alias/aws/secretsmanager key
+  # resolution to RDS comes back null without it (KMSKeyNotAccessibleFault).
+  master_user_secret_kms_key_id = "alias/aws/secretsmanager"
+  db_subnet_group_name          = aws_db_subnet_group.rds.name
+  skip_final_snapshot           = true
 }
 
 # 4. IAM Role for RDS Export Tasks to S3
