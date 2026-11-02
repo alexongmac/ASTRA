@@ -382,16 +382,27 @@ resource "aws_iam_role_policy" "rds_scoped" {
     Version = "2012-10-17"
     Statement = [
       {
+        # Describe/List calls don't support resource-level scoping the way
+        # Create/Delete/Modify do - IAM evaluates them against all RDS
+        # resources in the account regardless of any ARN filter here.
+        Sid    = "RdsDescribe"
+        Effect = "Allow"
+        Action = [
+          "rds:DescribeDBInstances",
+          "rds:DescribeDBSubnetGroups",
+          "rds:ListTagsForResource",
+        ]
+        Resource = "*"
+      },
+      {
         Sid    = "RdsInstanceManage"
         Effect = "Allow"
         Action = [
           "rds:CreateDBInstance",
           "rds:DeleteDBInstance",
           "rds:ModifyDBInstance",
-          "rds:DescribeDBInstances",
           "rds:AddTagsToResource",
           "rds:RemoveTagsFromResource",
-          "rds:ListTagsForResource",
         ]
         Resource = [
           "arn:aws:rds:*:*:db:astra-*",
@@ -405,10 +416,8 @@ resource "aws_iam_role_policy" "rds_scoped" {
           "rds:CreateDBSubnetGroup",
           "rds:DeleteDBSubnetGroup",
           "rds:ModifyDBSubnetGroup",
-          "rds:DescribeDBSubnetGroups",
           "rds:AddTagsToResource",
           "rds:RemoveTagsFromResource",
-          "rds:ListTagsForResource",
         ]
         Resource = "arn:aws:rds:*:*:subgrp:astra-*"
       },
