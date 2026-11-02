@@ -393,7 +393,10 @@ resource "aws_iam_role_policy" "rds_scoped" {
           "rds:RemoveTagsFromResource",
           "rds:ListTagsForResource",
         ]
-        Resource = "arn:aws:rds:*:*:db:astra-*"
+        Resource = [
+          "arn:aws:rds:*:*:db:astra-*",
+          "arn:aws:rds:*:*:subgrp:astra-*",
+        ]
       },
       {
         Sid    = "RdsSubnetGroupManage"
@@ -410,13 +413,34 @@ resource "aws_iam_role_policy" "rds_scoped" {
         Resource = "arn:aws:rds:*:*:subgrp:astra-*"
       },
       {
-        Sid    = "RdsManagedSecretRead"
+        Sid    = "RdsManagedSecretManage"
         Effect = "Allow"
         Action = [
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret",
+          "secretsmanager:CreateSecret",
+          "secretsmanager:DeleteSecret",
+          "secretsmanager:TagResource",
+          "secretsmanager:UntagResource",
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:UpdateSecret",
         ]
         Resource = "arn:aws:secretsmanager:*:*:secret:rds!db-*"
+      },
+      {
+        Sid    = "RdsManagedSecretKms"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:CreateGrant",
+        ]
+        Resource = "*"
+        Condition = {
+          StringLike = {
+            "kms:ViaService" = "secretsmanager.*.amazonaws.com"
+          }
+        }
       },
     ]
   })
