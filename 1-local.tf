@@ -11,5 +11,5 @@ locals {
   eks_version       = "1.37"
   thing_name        = "nodered-bridge"
   mqtt_client_id    = "mosquitto-bridge"
-  mqtt_topic_prefix = "nodered"
+  mqtt_topic_prefix = "r2d2"
 }
