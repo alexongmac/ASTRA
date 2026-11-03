@@ -19,8 +19,8 @@ resource "aws_iot_policy" "raspberry_pi" {
         Effect = "Allow"
         Action = ["iot:Publish", "iot:Subscribe", "iot:Receive"]
         Resource = [
-          "arn:aws:iot:${local.region}:${data.aws_caller_identity.current.account_id}:topic/${local.mqtt_topic_prefix}/*",
-          "arn:aws:iot:${local.region}:${data.aws_caller_identity.current.account_id}:topicfilter/${local.mqtt_topic_prefix}/*",
+          "arn:aws:iot:${local.region}:${data.aws_caller_identity.current.account_id}:topic/${local.mqtt_topic_prefix}/*/oee/*",
+          "arn:aws:iot:${local.region}:${data.aws_caller_identity.current.account_id}:topicfilter/${local.mqtt_topic_prefix}/*/oee/*",
         ]
       },
     ]
