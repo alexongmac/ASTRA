@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rds-proxy
+spec:
+  restartPolicy: Never
+  containers:
+    - name: rds-proxy
+      image: alpine/socat
+      command:
+        - socat
+        - TCP-LISTEN:3306,fork,reuseaddr
+        - TCP:astra-mysql-db.chheppac9ozc.us-east-1.rds.amazonaws.com:3306

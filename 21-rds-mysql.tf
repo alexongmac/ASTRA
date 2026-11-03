@@ -16,6 +16,36 @@ resource "aws_db_subnet_group" "rds" {
   }
 }
 
+# 2a. Security Group for RDS - ingress rules declared separately below
+# (aws_security_group_rule resources) so multiple files can add rules
+# without each apply fighting over the inline ingress block.
+resource "aws_security_group" "rds" {
+  name        = "astra-rds-sg"
+  description = "Allow MySQL access from the EKS cluster"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "astra-rds-sg"
+  }
+}
+
+resource "aws_security_group_rule" "rds_from_eks_cluster" {
+  type                     = "ingress"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.rds.id
+  source_security_group_id = aws_eks_cluster.eks.vpc_config[0].cluster_security_group_id
+  description              = "MySQL from EKS cluster"
+}
+
 # 3. RDS MySQL Instance with Auto-Generated Password via AWS Secrets Manager
 resource "aws_db_instance" "mysql" {
   identifier                  = "astra-mysql-db"
@@ -30,6 +60,7 @@ resource "aws_db_instance" "mysql" {
   # resolution to RDS comes back null without it (KMSKeyNotAccessibleFault).
   master_user_secret_kms_key_id = "alias/aws/secretsmanager"
   db_subnet_group_name          = aws_db_subnet_group.rds.name
+  vpc_security_group_ids        = [aws_security_group.rds.id]
   skip_final_snapshot           = true
 }
 
