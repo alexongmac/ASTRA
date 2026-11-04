@@ -530,6 +530,14 @@ resource "aws_iam_role_policy" "iot_scoped" {
         Resource = "*"
       },
       {
+        # ListTopicRules doesn't support resource-level scoping - same
+        # Describe/List pattern as RdsDescribe above.
+        Sid      = "IotTopicRuleList"
+        Effect   = "Allow"
+        Action   = "iot:ListTopicRules"
+        Resource = "*"
+      },
+      {
         Sid    = "IotTopicRuleManage"
         Effect = "Allow"
         Action = [
@@ -537,7 +545,6 @@ resource "aws_iam_role_policy" "iot_scoped" {
           "iot:DeleteTopicRule",
           "iot:GetTopicRule",
           "iot:ReplaceTopicRule",
-          "iot:ListTopicRules",
           "iot:ListTagsForResource",
           "iot:TagResource",
           "iot:UntagResource",
