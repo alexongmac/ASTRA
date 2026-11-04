@@ -47,11 +47,10 @@ jobs:
 
       # lambda/*.zip is gitignored (build artifacts, not source) - build them
       # here so terraform validate/plan can resolve filebase64sha256() on them.
+      # build.py produces a byte-identical zip for identical source, so this
+      # doesn't force a new Lambda/layer version on every CI run.
       - name: Build Lambda artifacts
-        run: |
-          pip install pymysql -t lambda/layer/python --quiet
-          cd lambda/layer && zip -r -q ../pymysql-layer.zip python && cd ../..
-          cd lambda/oee-ingest && zip -q ../oee-ingest.zip handler.py
+        run: python3 lambda/build.py
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
@@ -115,10 +114,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Build Lambda artifacts
-        run: |
-          pip install pymysql -t lambda/layer/python --quiet
-          cd lambda/layer && zip -r -q ../pymysql-layer.zip python && cd ../..
-          cd lambda/oee-ingest && zip -q ../oee-ingest.zip handler.py
+        run: python3 lambda/build.py
 
       - name: Terraform Init
         run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
