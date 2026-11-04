@@ -530,6 +530,16 @@ resource "aws_iam_role_policy" "iot_scoped" {
         Resource = "*"
       },
       {
+        # Account/region-wide singleton config, not scoped to any one resource.
+        Sid    = "IotIndexingConfigManage"
+        Effect = "Allow"
+        Action = [
+          "iot:GetIndexingConfiguration",
+          "iot:UpdateIndexingConfiguration",
+        ]
+        Resource = "*"
+      },
+      {
         # ListTopicRules doesn't support resource-level scoping - same
         # Describe/List pattern as RdsDescribe above.
         Sid      = "IotTopicRuleList"

@@ -44,3 +44,13 @@ resource "aws_iot_thing_principal_attachment" "raspberry_pi" {
 data "aws_iot_endpoint" "this" {
   endpoint_type = "iot:Data-ATS"
 }
+
+# Enables Fleet Indexing's connectivity tracking so live connect/disconnect
+# status is queryable (iot:SearchIndex) and shows up in the console's
+# "Manage MQTT client connectivity" view - off by default on a fresh account.
+resource "aws_iot_indexing_configuration" "this" {
+  thing_indexing_configuration {
+    thing_indexing_mode              = "REGISTRY"
+    thing_connectivity_indexing_mode = "STATUS"
+  }
+}
