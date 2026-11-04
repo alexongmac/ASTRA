@@ -529,6 +529,62 @@ resource "aws_iam_role_policy" "iot_scoped" {
         Action   = "iot:DescribeEndpoint"
         Resource = "*"
       },
+      {
+        Sid    = "IotTopicRuleManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateTopicRule",
+          "iot:DeleteTopicRule",
+          "iot:GetTopicRule",
+          "iot:ReplaceTopicRule",
+          "iot:ListTopicRules",
+          "iot:ListTagsForResource",
+          "iot:TagResource",
+          "iot:UntagResource",
+        ]
+        Resource = "arn:aws:iot:*:*:rule/*"
+      },
+    ]
+  })
+}
+
+# Lambda function/layer management for the OEE ingest pipeline, plus the
+# resource-policy permission the IoT Rule needs to invoke the function.
+resource "aws_iam_role_policy" "lambda_scoped" {
+  name = "lambda-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "LambdaFunctionManage"
+        Effect = "Allow"
+        Action = [
+          "lambda:CreateFunction",
+          "lambda:DeleteFunction",
+          "lambda:GetFunction",
+          "lambda:UpdateFunctionCode",
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:TagResource",
+          "lambda:UntagResource",
+          "lambda:ListTags",
+          "lambda:GetPolicy",
+          "lambda:AddPermission",
+          "lambda:RemovePermission",
+        ]
+        Resource = "arn:aws:lambda:*:*:function:astra-*"
+      },
+      {
+        Sid    = "LambdaLayerManage"
+        Effect = "Allow"
+        Action = [
+          "lambda:PublishLayerVersion",
+          "lambda:DeleteLayerVersion",
+          "lambda:GetLayerVersion",
+        ]
+        Resource = "arn:aws:lambda:*:*:layer:astra-*"
+      },
     ]
   })
 }
