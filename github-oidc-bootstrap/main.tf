@@ -561,16 +561,19 @@ resource "aws_iam_role_policy" "lambda_scoped" {
         Sid    = "LambdaFunctionManage"
         Effect = "Allow"
         Action = [
+          # Get*/List* granted broadly (still scoped to astra-* function
+          # names below) because the provider's Read for aws_lambda_function
+          # probes several related sub-resources (code signing config, event
+          # invoke config, concurrency, policy, versions, tags) and drip-feeding
+          # one missing action per CI run isn't worth the round-trips.
+          "lambda:Get*",
+          "lambda:List*",
           "lambda:CreateFunction",
           "lambda:DeleteFunction",
-          "lambda:GetFunction",
-          "lambda:ListVersionsByFunction",
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
           "lambda:TagResource",
           "lambda:UntagResource",
-          "lambda:ListTags",
-          "lambda:GetPolicy",
           "lambda:AddPermission",
           "lambda:RemovePermission",
         ]
@@ -582,7 +585,8 @@ resource "aws_iam_role_policy" "lambda_scoped" {
         Action = [
           "lambda:PublishLayerVersion",
           "lambda:DeleteLayerVersion",
-          "lambda:GetLayerVersion",
+          "lambda:Get*",
+          "lambda:List*",
         ]
         Resource = "arn:aws:lambda:*:*:layer:astra-*"
       },
