@@ -564,6 +564,7 @@ resource "aws_iam_role_policy" "lambda_scoped" {
           "lambda:CreateFunction",
           "lambda:DeleteFunction",
           "lambda:GetFunction",
+          "lambda:ListVersionsByFunction",
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
           "lambda:TagResource",
