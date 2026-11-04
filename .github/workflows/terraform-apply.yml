@@ -45,6 +45,14 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # lambda/*.zip is gitignored (build artifacts, not source) - build them
+      # here so terraform validate/plan can resolve filebase64sha256() on them.
+      - name: Build Lambda artifacts
+        run: |
+          pip install pymysql -t lambda/layer/python --quiet
+          cd lambda/layer && zip -r -q ../pymysql-layer.zip python && cd ../..
+          cd lambda/oee-ingest && zip -q ../oee-ingest.zip handler.py
+
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
@@ -105,6 +113,12 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+
+      - name: Build Lambda artifacts
+        run: |
+          pip install pymysql -t lambda/layer/python --quiet
+          cd lambda/layer && zip -r -q ../pymysql-layer.zip python && cd ../..
+          cd lambda/oee-ingest && zip -q ../oee-ingest.zip handler.py
 
       - name: Terraform Init
         run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
