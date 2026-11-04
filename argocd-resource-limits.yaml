@@ -1,0 +1,126 @@
+# Resource requests/limits for ArgoCD's raw-manifest install (installed via
+# `kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/...`
+# in README.md, so there's no Helm values file to set these in).
+#
+# This file documents the values applied, but DON'T `kubectl apply -f` it as-is:
+# these are partial Deployment/StatefulSet specs, and `apply` treats a partial
+# manifest as the full desired state - it nulls out spec.selector, container
+# images, etc. that aren't listed here, which errors (immutable fields) or
+# would wipe the real spec. Apply each as a `kubectl patch --type strategic`
+# instead, matching exactly what's below. Fixes Kyverno's
+# require-resource-limits policy failures for this namespace.
+#
+# kubectl patch deployment argocd-applicationset-controller -n argocd --type strategic -p '{"spec":{"template":{"spec":{"containers":[{"name":"argocd-applicationset-controller","resources":{"requests":{"cpu":"20m","memory":"64Mi"},"limits":{"cpu":"100m","memory":"128Mi"}}}]}}}}'
+# kubectl patch deployment argocd-dex-server -n argocd --type strategic -p '{"spec":{"template":{"spec":{"initContainers":[{"name":"copyutil","resources":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"cpu":"50m","memory":"64Mi"}}}],"containers":[{"name":"dex","resources":{"requests":{"cpu":"20m","memory":"64Mi"},"limits":{"cpu":"100m","memory":"128Mi"}}}]}}}}'
+# kubectl patch deployment argocd-notifications-controller -n argocd --type strategic -p '{"spec":{"template":{"spec":{"containers":[{"name":"argocd-notifications-controller","resources":{"requests":{"cpu":"20m","memory":"64Mi"},"limits":{"cpu":"100m","memory":"128Mi"}}}]}}}}'
+# kubectl patch deployment argocd-redis -n argocd --type strategic -p '{"spec":{"template":{"spec":{"initContainers":[{"name":"secret-init","resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"50m","memory":"32Mi"}}}],"containers":[{"name":"redis","resources":{"requests":{"cpu":"20m","memory":"32Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}}}'
+# kubectl patch deployment argocd-repo-server -n argocd --type strategic -p '{"spec":{"template":{"spec":{"containers":[{"name":"argocd-repo-server","resources":{"requests":{"cpu":"30m","memory":"128Mi"},"limits":{"cpu":"200m","memory":"256Mi"}}}]}}}}'
+# kubectl patch deployment argocd-server -n argocd --type strategic -p '{"spec":{"template":{"spec":{"containers":[{"name":"argocd-server","resources":{"requests":{"cpu":"30m","memory":"64Mi"},"limits":{"cpu":"150m","memory":"128Mi"}}}]}}}}'
+# kubectl patch statefulset argocd-application-controller -n argocd --type strategic -p '{"spec":{"template":{"spec":{"containers":[{"name":"argocd-application-controller","resources":{"requests":{"cpu":"50m","memory":"128Mi"},"limits":{"cpu":"250m","memory":"256Mi"}}}]}}}}'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-applicationset-controller
+  namespace: argocd
+spec:
+  template:
+    spec:
+      containers:
+        - name: argocd-applicationset-controller
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 100m, memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-dex-server
+  namespace: argocd
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: copyutil
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
+      containers:
+        - name: dex
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 100m, memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-notifications-controller
+  namespace: argocd
+spec:
+  template:
+    spec:
+      containers:
+        - name: argocd-notifications-controller
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 100m, memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-redis
+  namespace: argocd
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: secret-init
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 50m, memory: 32Mi }
+      containers:
+        - name: redis
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+spec:
+  template:
+    spec:
+      containers:
+        - name: argocd-repo-server
+          resources:
+            requests: { cpu: 30m, memory: 128Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-server
+  namespace: argocd
+spec:
+  template:
+    spec:
+      containers:
+        - name: argocd-server
+          resources:
+            requests: { cpu: 30m, memory: 64Mi }
+            limits: { cpu: 150m, memory: 128Mi }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: argocd-application-controller
+  namespace: argocd
+spec:
+  template:
+    spec:
+      containers:
+        - name: argocd-application-controller
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 250m, memory: 256Mi }

@@ -57,3 +57,10 @@ certs/
 # Lambda build artifacts - zipped by terraform from source, not tracked
 lambda/*.zip
 lambda/layer/
+
+# DB dumps and exported query results - local working data, not source
+*.sql
+*.csv
+
+# migrations/*.sql are tracked schema/seed scripts, not throwaway dumps
+!migrations/*.sql

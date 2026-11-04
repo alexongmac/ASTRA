@@ -36,6 +36,14 @@ singleBinary:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { cpu: 200m, memory: 256Mi }
 
+# kiwigrid/k8s-sidecar watches for ConfigMap-based rules and reloads them -
+# defaults to {} (no limits) upstream, flagged by Kyverno's
+# require-resource-limits policy.
+sidecar:
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { cpu: 100m, memory: 64Mi }
+
 # SingleBinary mode doesn't use the read/write/backend split - disable them
 # so the chart doesn't also deploy the SimpleScalable components.
 read:

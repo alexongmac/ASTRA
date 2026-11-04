@@ -42,6 +42,12 @@ helm repo add grafana https://grafana.github.io/helm-charts
 
 helm repo add autoscaler https://kubernetes.github.io/autoscaler
 
+helm repo add kyverno https://kyverno.github.io/kyverno/
+
+helm repo add aqua https://aquasecurity.github.io/helm-charts/
+
+helm repo add aqua https://aquasecurity.github.io/helm-charts/
+
 helm repo update
 
 ====================================
@@ -82,25 +88,12 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
 
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
  --namespace monitoring \
- --create-namespace \
- --set prometheus.prometheusSpec.resources.requests.cpu=100m \
- --set prometheus.prometheusSpec.resources.requests.memory=256Mi \
- --set prometheus.prometheusSpec.resources.limits.cpu=500m \
- --set prometheus.prometheusSpec.resources.limits.memory=512Mi \
- --set prometheus.prometheusSpec.retention=6h \
- --set alertmanager.alertmanagerSpec.resources.requests.cpu=25m \
- --set alertmanager.alertmanagerSpec.resources.requests.memory=64Mi \
- --set alertmanager.alertmanagerSpec.resources.limits.cpu=100m \
- --set alertmanager.alertmanagerSpec.resources.limits.memory=128Mi \
- --set grafana.resources.requests.cpu=50m \
- --set grafana.resources.requests.memory=256Mi \
- --set grafana.resources.limits.cpu=200m \
- --set grafana.resources.limits.memory=512Mi \
- --set kubeControllerManager.enabled=true \
- --set kubeScheduler.enabled=true \
- --set kubeEtcd.enabled=true \
- --set kubeProxy.enabled=true \
- --wait --timeout 600s
+ --set grafana.sidecar.resources.requests.cpu=20m \
+ --set grafana.sidecar.resources.requests.memory=32Mi \
+ --set grafana.sidecar.resources.limits.cpu=100m \
+ --set grafana.sidecar.resources.limits.memory=64Mi \
+ --reuse-values \
+ --wait --timeout 300s 2>&1 | tail -15
 
 ====================================
 
@@ -123,8 +116,60 @@ helm upgrade --install cluster-autoscaler autoscaler/cluster-autoscaler \
 helm upgrade --install loki grafana/loki \
  --version 7.5.0 \
  --namespace monitoring \
- --create-namespace \
  -f loki-values.yaml \
+ --wait --timeout 600s 2>&1 | tail -20
+
+====================================
+
+helm upgrade --install kyverno kyverno/kyverno \
+ --namespace kyverno \
+ --set admissionController.resources.requests.cpu=50m \
+ --set admissionController.resources.requests.memory=128Mi \
+ --set admissionController.resources.limits.cpu=200m \
+ --set admissionController.resources.limits.memory=256Mi \
+ --set backgroundController.resources.requests.cpu=30m \
+ --set backgroundController.resources.requests.memory=64Mi \
+ --set backgroundController.resources.limits.cpu=150m \
+ --set backgroundController.resources.limits.memory=192Mi \
+ --set cleanupController.resources.requests.cpu=20m \
+ --set cleanupController.resources.requests.memory=64Mi \
+ --set cleanupController.resources.limits.cpu=100m \
+ --set cleanupController.resources.limits.memory=128Mi \
+ --set reportsController.resources.requests.cpu=30m \
+ --set reportsController.resources.requests.memory=64Mi \
+ --set reportsController.resources.limits.cpu=150m \
+ --set reportsController.resources.limits.memory=192Mi \
+ --wait --timeout 300s
+
+====================================
+
+### Kyverno policy: require-resource-limits (audit mode)
+
+kubectl apply -f kyverno-require-resource-limits.yaml
+
+Audits every Pod for missing CPU/memory limits (validationFailureAction: Audit, so nothing is blocked - just reported). Check results:
+
+kubectl get polr -A
+kubectl get polr -A --no-headers | awk '{fail[$1]+=$6; total[$1]++} END {for (ns in fail) print ns, "fail="fail[ns], "resources="total[ns]}' | sort -k2 -t= -rn
+
+### Fixing resource-limit failures per install method
+
+Most of this cluster's workloads come from one of three install paths, and each needs a different fix for missing CPU/memory limits:
+
+1. **Helm charts** (kyverno, kube-prometheus-stack, loki) - set via `--set resources...` on `helm upgrade --install`, same pattern as the install commands above. Also check for sidecar containers with their own `resources` key (e.g. `kiwigrid/k8s-sidecar` in both Loki's `sidecar.resources` and Grafana's `grafana.sidecar.resources` - defaults to `{}` upstream, not inherited from the main container).
+
+2. **EKS-managed addons** (cert-manager, external-dns, in 13-addons.tf) - not Helm, so `--set` doesn't apply. Use the `aws_eks_addon` resource's `configuration_values` field instead (JSON-encoded, schema discoverable via `aws eks describe-addon-configuration --addon-name <name> --addon-version <version>`). coredns/kube-proxy/aws-node/ebs-csi/eks-pod-identity-agent are also EKS addons but don't expose a `resources` key in their configuration schema - left unaddressed for now, since overriding them isn't straightforward and they're AWS-managed system components, not app-layer workloads.
+
+3. **Raw manifests** (ArgoCD, installed via `kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/...`) - no values file at all. Patch the live Deployments/StatefulSet directly with `kubectl patch --type strategic` (NOT `kubectl apply` - a partial manifest gets treated as the full desired state and nulls out `spec.selector`/images/etc., which errors on immutable fields). See argocd-resource-limits.yaml for the exact values and patch commands.
+
+Watch for init containers reported separately from the main container (e.g. ArgoCD's `argocd-redis` has an `secret-init` init container, `argocd-dex-server` has a `copyutil` init container) - each needs its own `resources` entry.
+
+====================================
+
+helm upgrade --install trivy-operator aqua/trivy-operator \
+ --namespace trivy-system \
+ --create-namespace \
+ --set="trivy.ignoreUnfixed=true" \
  --wait --timeout 600s
 
 ====================================
@@ -205,25 +250,7 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 
 ### Check ArgoCD is installed
 
-kubectl get all -n argocd
-kubectl get pods -n argocd
-
-### to get the secrets
-
-kubectl get secret -n argocd
-kubectl get secret -n argocd argocd-initial-admin-secret -o yaml
-echo 'bbbbbbbbbbbbb' | base64 -d
-
-### Use this command to access ArgoCD on your local machine on port 8080
-
-kubectl get svc -n argocd
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-open browser type: localhost:8080/
-
-### Enter Username and password
-
-Username: admin
-password : xxxxxxxxxxx
+❯ k get pods,svc,secrets -n argocd
 
 ### To interact with ArgoCD, Install argocd cli
 
@@ -232,6 +259,27 @@ brew install argocd
 or refer to documentation
 
 https://argo-cd.readthedocs.io/en/stable/cli_installation/
+
+### to get the secrets
+
+kubectl get secret -n argocd
+
+kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 --decode
+
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+open a Browser and type
+
+### Use this command to access ArgoCD on your local machine on port 8080
+
+kubectl get svc -n argocd
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+open browser type: localhost:8080/
+
+### Enter argoCD Username and password
+
+Username: admin
+password : xxxxxxxxxxx
 
 ### To access the RDS via EKS internal subnet
 
@@ -250,9 +298,35 @@ create a relay pod...
 kubectl apply -f rds-proxy.yaml
 kubectl wait --for=condition=Ready pod/rds-proxy --timeout=60s
 kubectl port-forward pod/rds-proxy 3306:3306
+
 Connect via Workbench to 127.0.0.1:3306, user dbadmin, schema astradb, password from Secrets Manager.
 
 when done, clean up
 
 kubectl delete -f rds-access.yaml
 kubectl delete -f rds-proxy.yaml
+
+### To dump SQL database
+
+kubectl exec rds-access -- mysqldump \
+ -h astra-mysql-db.chheppac9ozc.us-east-1.rds.amazonaws.com \
+ -P 3306 -u dbadmin -p'your secrets password' \
+ --single-transaction --skip-lock-tables \
+ --column-statistics=0 \
+ --databases astradb > astradb_dump.sql
+
+### To get database table to csv
+
+kubectl exec rds-access -- mysql \
+ -h astra-mysql-db.chheppac9ozc.us-east-1.rds.amazonaws.com \
+ -P 3306 -u dbadmin -p'your secrets password' astradb \
+ -e "SELECT \* FROM machine_events" \
+ --batch --raw | tr '\t' ',' > machine_events.csv
+
+### Check Trivy operator pod status
+
+kubectl get pods -n trivy-system
+
+### Running and healthy. It automatically scans workloads as they're created/updated — no manual trigger needed for that. To see its actual scan results right now:
+
+kubectl get vulnerabilityreports -A -o wide
