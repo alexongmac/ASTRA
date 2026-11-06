@@ -16,36 +16,10 @@ resource "helm_release" "argocd" {
   depends_on = [kubernetes_namespace.argocd]
 }
 
-# Bootstraps the astra AppProject and the "App of Apps" root Application
-# from ASTRA_argocd. ArgoCD then takes over syncing everything under
-# Applications/ in that repo - these are the only manifests Terraform
-# ever applies directly.
-data "http" "astra_project_manifest" {
-  url = "https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/main/bootstrap/astra-project.yaml"
-}
-
-resource "kubectl_manifest" "astra_project" {
-  yaml_body = data.http.astra_project_manifest.response_body
-
-  depends_on = [helm_release.argocd]
-}
-
-data "http" "root_app_manifest" {
-  url = "https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/main/bootstrap/root-app.yaml"
-}
-
-locals {
-  # development tracks the develop branch, production tracks main - keeps
-  # each cluster in sync with the branch its own tfvars already selects.
-  argocd_target_revision = var.environment == "production" ? "main" : "develop"
-}
-
-resource "kubectl_manifest" "root_app" {
-  yaml_body = replace(
-    data.http.root_app_manifest.response_body,
-    "targetRevision: main",
-    "targetRevision: ${local.argocd_target_revision}",
-  )
-
-  depends_on = [kubectl_manifest.astra_project]
-}
+# The astra AppProject and the "App of Apps" root Application (ASTRA_argocd's
+# bootstrap/ folder) are applied manually via kubectl, not here - the kubectl
+# provider's plan-time validation rejects a manifest if any CRD it references
+# doesn't exist yet (e.g. kyverno-policies.yaml's ClusterPolicy, before
+# Kyverno itself has synced), which blocks `terraform plan` entirely. A
+# manual `kubectl apply` doesn't pre-validate CRDs the same way. See
+# README.md for the apply command.

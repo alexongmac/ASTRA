@@ -20,13 +20,6 @@ provider "helm" {
   }
 }
 
-provider "kubectl" {
-  host                   = aws_eks_cluster.eks.endpoint
-  cluster_ca_certificate = base64decode(aws_eks_cluster.eks.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.eks.token
-  load_config_file       = false
-}
-
 terraform {
   required_providers {
     aws = {
@@ -44,14 +37,6 @@ terraform {
     helm = {
       source  = "hashicorp/helm"
       version = "~> 2.17"
-    }
-    kubectl = {
-      source  = "alekc/kubectl"
-      version = "~> 2.1"
-    }
-    http = {
-      source  = "hashicorp/http"
-      version = "~> 3.4"
     }
   }
 
