@@ -126,6 +126,16 @@ resource "aws_kms_alias" "rds_secret" {
   target_key_id = aws_kms_key.rds_secret[0].key_id
 }
 
+# The key's own policy (granting rds.amazonaws.com/secretsmanager.amazonaws.com
+# access above) is also eventually consistent - confirmed by manually retrying
+# the identical CreateDBInstance call, which succeeded once enough time had
+# passed. aws_db_instance.mysql waits on this before using the key.
+resource "time_sleep" "wait_for_kms_key_policy_propagation" {
+  count           = var.environment == "production" ? 1 : 0
+  depends_on      = [aws_kms_alias.rds_secret]
+  create_duration = "30s"
+}
+
 # 3. RDS MySQL Instance with Auto-Generated Password via AWS Secrets Manager
 resource "aws_db_instance" "mysql" {
   # Not renamed for development - RDS identifier changes get bundled into
@@ -153,6 +163,8 @@ resource "aws_db_instance" "mysql" {
   # detach the old security group's RDS-owned ENI, and the dependent
   # subnet-group/security-group replacement fails.
   apply_immediately = true
+
+  depends_on = [time_sleep.wait_for_kms_key_policy_propagation]
 }
 
 # 4. IAM Role for RDS Export Tasks to S3
