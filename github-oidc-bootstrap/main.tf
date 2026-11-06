@@ -437,6 +437,12 @@ resource "aws_iam_role_policy" "rds_scoped" {
         Resource = "arn:aws:secretsmanager:*:*:secret:rds!db-*"
       },
       {
+        # CreateDBInstance with manage_master_user_password calls KMS
+        # directly as rds.amazonaws.com (to set up the secret's encryption),
+        # not only via secretsmanager.amazonaws.com once the secret already
+        # exists - both services need to be allowed, or CreateDBInstance
+        # fails with KMSKeyNotAccessibleFault despite the key's own policy
+        # permitting it.
         Sid    = "RdsManagedSecretKms"
         Effect = "Allow"
         Action = [
@@ -449,9 +455,15 @@ resource "aws_iam_role_policy" "rds_scoped" {
           "kms:DescribeKey",
         ]
         Resource = "*"
+        # kms:ViaService is single-valued (one service per call), so a plain
+        # StringLike with a list - not ForAnyValue, which is for multi-valued
+        # keys - matches a call made via either service.
         Condition = {
           StringLike = {
-            "kms:ViaService" = "secretsmanager.*.amazonaws.com"
+            "kms:ViaService" = [
+              "secretsmanager.*.amazonaws.com",
+              "rds.*.amazonaws.com",
+            ]
           }
         }
       },
