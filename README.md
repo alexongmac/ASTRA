@@ -32,6 +32,8 @@ kubectl get polr -A --no-headers | awk '{fail[$1]+=$6; total[$1]++} END {for (ns
 
 kubectl --namespace monitoring get secrets kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
 
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
 ### CloudWatch for audit logging who did what, when, via the K8s API
 
 1. Go to CloudWatch -> Log groups
@@ -61,6 +63,28 @@ Then fetch results with
 
 aws logs get-query-results --query-id <id>.
 
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+    --namespace monitoring \
+    --create-namespace \
+    --set prometheus.prometheusSpec.resources.requests.cpu=100m \
+    --set prometheus.prometheusSpec.resources.requests.memory=256Mi \
+    --set prometheus.prometheusSpec.resources.limits.cpu=500m \
+    --set prometheus.prometheusSpec.resources.limits.memory=512Mi \
+    --set prometheus.prometheusSpec.retention=6h \
+    --set alertmanager.alertmanagerSpec.resources.requests.cpu=25m \
+    --set alertmanager.alertmanagerSpec.resources.requests.memory=64Mi \
+    --set alertmanager.alertmanagerSpec.resources.limits.cpu=100m \
+    --set alertmanager.alertmanagerSpec.resources.limits.memory=128Mi \
+    --set grafana.resources.requests.cpu=50m \
+    --set grafana.resources.requests.memory=256Mi \
+    --set grafana.resources.limits.cpu=200m \
+    --set grafana.resources.limits.memory=512Mi \
+    --set kubeControllerManager.enabled=true \
+    --set kubeScheduler.enabled=true \
+    --set kubeEtcd.enabled=true \
+    --set kubeProxy.enabled=true \
+    --wait --timeout 600s
+
 ### some of the aws eks command:
 
 - aws eks update-kubeconfig --region us-east-1 --name astra-eks-development-cluster --profile <username>
@@ -75,6 +99,15 @@ aws logs get-query-results --query-id <id>.
 
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+helm upgrade --install loki grafana/loki \
+  --version 7.5.0 \
+  --namespace monitoring \
+  --create-namespace \
+  -f loki-values.yaml \
+  --wait --timeout 600s
+
+====================================
 
 ### Check ArgoCD is installed
 
