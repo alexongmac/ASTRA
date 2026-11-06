@@ -66,9 +66,21 @@ resource "aws_security_group_rule" "rds_from_eks_cluster" {
 # SCP restriction we can't inspect from inside this member account. A
 # customer-managed key sidesteps whatever's blocking the AWS-managed one.
 # development keeps using the AWS-managed key since it already works there.
+# IAM is eventually consistent - the github-oidc-role's KMS permissions
+# (module.github_oidc_bootstrap) can take a few seconds to actually be
+# enforced after being granted, so CreateKey succeeds but the immediate
+# DescribeKey read-back that finishes creating this resource fails with
+# AccessDeniedException. This forces a wait before the key is created.
+resource "time_sleep" "wait_for_kms_iam_propagation" {
+  count           = var.environment == "production" ? 1 : 0
+  depends_on      = [module.github_oidc_bootstrap]
+  create_duration = "20s"
+}
+
 resource "aws_kms_key" "rds_secret" {
   count       = var.environment == "production" ? 1 : 0
   description = "Encrypts the RDS-managed master user secret for ${var.environment}"
+  depends_on  = [time_sleep.wait_for_kms_iam_propagation]
 
   # Unlike the AWS-managed key, a customer-managed key has no default grant
   # for RDS/Secrets Manager to use it - this must be explicit, or
