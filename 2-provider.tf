@@ -2,6 +2,31 @@ provider "aws" {
   region = local.region
 }
 
+data "aws_eks_cluster_auth" "eks" {
+  name = aws_eks_cluster.eks.name
+}
+
+provider "kubernetes" {
+  host                   = aws_eks_cluster.eks.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.eks.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.eks.token
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = aws_eks_cluster.eks.endpoint
+    cluster_ca_certificate = base64decode(aws_eks_cluster.eks.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.eks.token
+  }
+}
+
+provider "kubectl" {
+  host                   = aws_eks_cluster.eks.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.eks.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.eks.token
+  load_config_file       = false
+}
+
 terraform {
   required_providers {
     aws = {
@@ -11,6 +36,22 @@ terraform {
     time = {
       source  = "hashicorp/time"
       version = "~> 0.13"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.35"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.17"
+    }
+    kubectl = {
+      source  = "alekc/kubectl"
+      version = "~> 2.1"
+    }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4"
     }
   }
 
