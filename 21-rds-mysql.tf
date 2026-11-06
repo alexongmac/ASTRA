@@ -60,6 +60,60 @@ resource "aws_security_group_rule" "rds_from_eks_cluster" {
   description              = "MySQL from EKS cluster"
 }
 
+# Production only: the AWS-managed alias/aws/secretsmanager key fails with
+# KMSKeyNotAccessibleFault on CreateDBInstance in this account, despite both
+# the IAM role policy and the key policy allowing it - likely an org-level
+# SCP restriction we can't inspect from inside this member account. A
+# customer-managed key sidesteps whatever's blocking the AWS-managed one.
+# development keeps using the AWS-managed key since it already works there.
+resource "aws_kms_key" "rds_secret" {
+  count       = var.environment == "production" ? 1 : 0
+  description = "Encrypts the RDS-managed master user secret for ${var.environment}"
+
+  # Unlike the AWS-managed key, a customer-managed key has no default grant
+  # for RDS/Secrets Manager to use it - this must be explicit, or
+  # CreateDBInstance fails the same way as the AWS-managed key did.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowAccountFullAccess"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid    = "AllowRDSAndSecretsManagerUse"
+        Effect = "Allow"
+        Principal = {
+          Service = ["rds.amazonaws.com", "secretsmanager.amazonaws.com"]
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:CreateGrant",
+          "kms:DescribeKey",
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_kms_alias" "rds_secret" {
+  count         = var.environment == "production" ? 1 : 0
+  name          = "alias/astra-rds-secret-${var.environment}"
+  target_key_id = aws_kms_key.rds_secret[0].key_id
+}
+
 # 3. RDS MySQL Instance with Auto-Generated Password via AWS Secrets Manager
 resource "aws_db_instance" "mysql" {
   # Not renamed for development - RDS identifier changes get bundled into
@@ -74,9 +128,11 @@ resource "aws_db_instance" "mysql" {
   db_name                     = "astradb"
   username                    = "dbadmin"
   manage_master_user_password = true # Auto-generates & manages credentials in Secrets Manager
-  # Explicit because this account's default alias/aws/secretsmanager key
-  # resolution to RDS comes back null without it (KMSKeyNotAccessibleFault).
-  master_user_secret_kms_key_id = "alias/aws/secretsmanager"
+  # development: explicit because this account's default alias/aws/secretsmanager
+  # key resolution to RDS comes back null without it (KMSKeyNotAccessibleFault).
+  # production: the AWS-managed key itself is blocked (see aws_kms_key.rds_secret
+  # above), so this uses the customer-managed key instead.
+  master_user_secret_kms_key_id = var.environment == "production" ? aws_kms_alias.rds_secret[0].name : "alias/aws/secretsmanager"
   db_subnet_group_name          = aws_db_subnet_group.rds.name
   vpc_security_group_ids        = [aws_security_group.rds.id]
   skip_final_snapshot           = true
