@@ -455,6 +455,26 @@ resource "aws_iam_role_policy" "rds_scoped" {
           }
         }
       },
+      {
+        # Manages the customer-managed KMS key in 21-rds-mysql.tf (production
+        # only - sidesteps an org-level restriction on the AWS-managed
+        # alias/aws/secretsmanager key). Describe/List actions require
+        # Resource: "*" - can't be scoped to a specific key ARN.
+        Sid    = "RdsSecretKmsKeyManage"
+        Effect = "Allow"
+        Action = [
+          "kms:CreateKey",
+          "kms:TagResource",
+          "kms:PutKeyPolicy",
+          "kms:ScheduleKeyDeletion",
+          "kms:CreateAlias",
+          "kms:DeleteAlias",
+          "kms:UpdateAlias",
+          "kms:Get*",
+          "kms:List*",
+        ]
+        Resource = "*"
+      },
     ]
   })
 }
