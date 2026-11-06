@@ -36,23 +36,10 @@ jobs:
       # approval rules, and plan must run unapproved so reviewers can see the
       # diff before deciding whether to approve `apply`. So each env's role
       # ARN is its own repo-level variable, selected by branch instead.
-      # TEMPORARY: production's OIDC role doesn't exist yet (this run creates
-      # it via github-oidc-bootstrap), so there's nothing for OIDC to assume
-      # on main. Bootstrap with a real credential just this once, scoped to
-      # main only - develop keeps using OIDC as normal. Revert afterward.
-      - name: Configure AWS credentials (bootstrap, main only)
-        if: github.ref == 'refs/heads/main'
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_BOOTSTRAP }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_BOOTSTRAP }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Configure AWS credentials (OIDC, develop only)
-        if: github.ref != 'refs/heads/main'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.OIDC_ROLE_DEVELOPMENT }}
+          role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
@@ -92,11 +79,8 @@ jobs:
           quiet: true
           soft_fail: true
 
-      # TEMPORARY: scoped to just the bootstrap module while production's
-      # OIDC role doesn't exist yet - remove -target once it's created and
-      # revert to a full plan/apply for the rest of the environment.
       - name: Terraform Plan
-        run: terraform plan -var-file="envs/${ENVIRONMENT}.tfvars" ${{ github.ref == 'refs/heads/main' && '-target=module.github_oidc_bootstrap' || '' }}
+        run: terraform plan -var-file="envs/${ENVIRONMENT}.tfvars"
 
   apply:
     needs: plan
@@ -120,20 +104,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # TEMPORARY: see matching note in the plan job above.
-      - name: Configure AWS credentials (bootstrap, main only)
-        if: github.ref == 'refs/heads/main'
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_BOOTSTRAP }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_BOOTSTRAP }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Configure AWS credentials (OIDC, develop only)
-        if: github.ref != 'refs/heads/main'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.OIDC_ROLE_DEVELOPMENT }}
+          role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
@@ -145,6 +119,5 @@ jobs:
       - name: Terraform Init
         run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
 
-      # TEMPORARY: see matching note in the plan job above.
       - name: Terraform Apply
-        run: terraform apply -auto-approve -var-file="envs/${ENVIRONMENT}.tfvars" ${{ github.ref == 'refs/heads/main' && '-target=module.github_oidc_bootstrap' || '' }}
+        run: terraform apply -auto-approve -var-file="envs/${ENVIRONMENT}.tfvars"
