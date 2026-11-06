@@ -63,28 +63,6 @@ Then fetch results with
 
 aws logs get-query-results --query-id <id>.
 
-helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-    --namespace monitoring \
-    --create-namespace \
-    --set prometheus.prometheusSpec.resources.requests.cpu=100m \
-    --set prometheus.prometheusSpec.resources.requests.memory=256Mi \
-    --set prometheus.prometheusSpec.resources.limits.cpu=500m \
-    --set prometheus.prometheusSpec.resources.limits.memory=512Mi \
-    --set prometheus.prometheusSpec.retention=6h \
-    --set alertmanager.alertmanagerSpec.resources.requests.cpu=25m \
-    --set alertmanager.alertmanagerSpec.resources.requests.memory=64Mi \
-    --set alertmanager.alertmanagerSpec.resources.limits.cpu=100m \
-    --set alertmanager.alertmanagerSpec.resources.limits.memory=128Mi \
-    --set grafana.resources.requests.cpu=50m \
-    --set grafana.resources.requests.memory=256Mi \
-    --set grafana.resources.limits.cpu=200m \
-    --set grafana.resources.limits.memory=512Mi \
-    --set kubeControllerManager.enabled=true \
-    --set kubeScheduler.enabled=true \
-    --set kubeEtcd.enabled=true \
-    --set kubeProxy.enabled=true \
-    --wait --timeout 600s
-
 ### some of the aws eks command:
 
 - aws eks update-kubeconfig --region us-east-1 --name astra-eks-development-cluster --profile <username>
@@ -100,18 +78,9 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-helm upgrade --install loki grafana/loki \
-  --version 7.5.0 \
-  --namespace monitoring \
-  --create-namespace \
-  -f loki-values.yaml \
-  --wait --timeout 600s
-
-====================================
-
 ### Check ArgoCD is installed
 
-❯ kubectl get pods,svc,secrets -n argocd
+kubectl get pods,svc,secrets -n argocd
 
 ### to get the secrets
 
@@ -189,3 +158,27 @@ kubectl get polr -n kube-system | grep cluster-autoscaler
 kubectl describe polr <uid> -n kube-system
 
 kubectl describe polr 6d200205-b172-46c8-b8e9-1c92f228ff70 -n kube-system
+
+### to start argocd, we need to follow:
+
+terraform init -upgrade -backend-config="key=astra/development.tfstate" -reconfigure
+
+terraform plan -var-file="envs/development.tfvars" -target="helm_release.argocd"
+
+terraform apply -var-file="envs/development.tfvars" -target="helm_release.argocd"
+
+### once ArgoCD itself is running, bootstrap the astra AppProject and root Application
+
+these come from ASTRA_argocd's bootstrap/ folder and are applied directly via
+kubectl, not Terraform - kubectl_manifest's plan-time validation rejects a
+manifest if any CRD it references doesn't exist yet (e.g. a ClusterPolicy
+before Kyverno has synced), which blocked `terraform plan` entirely. Use
+`develop` for the development cluster, `main` for production.
+
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/astra-project.yaml
+
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/root-app.yaml
+
+### once applied, ArgoCD takes over syncing everything in ASTRA_argocd's Applications/ folder automatically
+
+kubectl get applications -n argocd
