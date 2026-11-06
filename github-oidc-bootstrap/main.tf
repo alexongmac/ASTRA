@@ -470,6 +470,11 @@ resource "aws_iam_role_policy" "rds_scoped" {
           "kms:CreateAlias",
           "kms:DeleteAlias",
           "kms:UpdateAlias",
+          "kms:DescribeKey",
+          "kms:GetKeyPolicy",
+          "kms:GetKeyRotationStatus",
+          "kms:ListResourceTags",
+          "kms:ListAliases",
           "kms:Get*",
           "kms:List*",
         ]
