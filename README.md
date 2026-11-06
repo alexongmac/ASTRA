@@ -167,17 +167,32 @@ terraform plan -var-file="envs/development.tfvars" -target="helm_release.argocd"
 
 terraform apply -var-file="envs/development.tfvars" -target="helm_release.argocd"
 
-### once ArgoCD itself is running, bootstrap the astra AppProject and root Application
+### once ArgoCD itself is running, bootstrap the astra AppProject, Traefik, and the root Application
 
 these come from ASTRA_argocd's bootstrap/ folder and are applied directly via
 kubectl, not Terraform - kubectl_manifest's plan-time validation rejects a
 manifest if any CRD it references doesn't exist yet (e.g. a ClusterPolicy
 before Kyverno has synced), which blocked `terraform plan` entirely. Use
-`develop` for the development cluster, `main` for production.
+the branch matching the cluster: `develop` for development, `main` for production.
+
+the AppProject every Application references:
 
 kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/astra-project.yaml
 
+Traefik must be installed BEFORE the root app - the traefik-classed ingresses
+in Applications/ fail ArgoCD's server-side-diff comparison if the traefik
+IngressClass doesn't exist yet (the AWS LB controller webhook rejects them),
+which would deadlock the whole root app. So Traefik is applied standalone here:
+
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/traefik-app.yaml
+
+then the root app-of-apps that syncs everything in Applications/:
+
 kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/root-app.yaml
+
+### IMPORTANT: root-app.yaml ships with targetRevision: main. On the development cluster, change it to develop or the app-of-apps tracks the wrong branch:
+
+kubectl patch application astra-root -n argocd --type merge -p '{"spec":{"source":{"targetRevision":"develop"}}}'
 
 ### once applied, ArgoCD takes over syncing everything in ASTRA_argocd's Applications/ folder automatically
 
