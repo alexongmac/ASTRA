@@ -48,6 +48,15 @@ data "aws_iam_policy_document" "github_trust" {
 resource "aws_iam_role" "github_oidc" {
   name               = var.github_oidc_role_name
   assume_role_policy = data.aws_iam_policy_document.github_trust.json
+
+  # CI authenticates to AWS solely by assuming this role via OIDC - if a
+  # destroy ever deletes it, every future CI run (including the destroy
+  # itself, mid-run) loses the only credential it has, and recreating it
+  # requires a one-time manual bootstrap with real AWS credentials. Refuse
+  # to destroy this one resource so that scenario can't happen again.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # No managed policies attached directly: every permission this role needs
@@ -63,6 +72,13 @@ resource "aws_iam_role" "github_oidc" {
 resource "aws_iam_role_policy" "eks" {
   name = "eks-cluster-management"
   role = aws_iam_role.github_oidc.name
+
+  # See the prevent_destroy note on aws_iam_role.github_oidc - a destroy
+  # deleting this role's own inline policies mid-run is what caused it to
+  # lose S3 state-bucket access partway through a prior destroy.
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -94,6 +110,7 @@ resource "aws_iam_role_policy" "eks" {
         "eks:DeleteAccessEntry",
         "eks:DescribeAccessEntry",
         "eks:ListAccessEntries",
+        "eks:UpdateAccessEntry",
         "eks:AssociateAccessPolicy",
         "eks:DisassociateAccessPolicy",
         "eks:ListAssociatedAccessPolicies",
@@ -115,6 +132,10 @@ resource "aws_iam_role_policy" "eks" {
 resource "aws_iam_role_policy" "networking" {
   name = "vpc-networking-management"
   role = aws_iam_role.github_oidc.name
+
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -194,6 +215,10 @@ resource "aws_iam_role_policy" "iam_scoped" {
   name = "iam-stack-management"
   role = aws_iam_role.github_oidc.name
 
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -239,6 +264,7 @@ resource "aws_iam_role_policy" "iam_scoped" {
         ]
         Resource = [
           "arn:aws:iam::*:role/astra-eks-*",
+          "arn:aws:iam::*:role/astra-rds-*",
           "arn:aws:iam::*:role/${var.github_oidc_role_name}",
           "arn:aws:iam::*:policy/astra-eks-*",
         ]
@@ -252,6 +278,10 @@ resource "aws_iam_role_policy" "iam_scoped" {
 resource "aws_iam_role_policy" "s3_scoped" {
   name = "s3-stack-management"
   role = aws_iam_role.github_oidc.name
+
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -283,6 +313,10 @@ resource "aws_iam_role_policy" "s3_scoped" {
           "s3:ListBucket",
           "s3:ListBucketVersions",
           "s3:DeleteObjectVersion",
+          "s3:PutBucketPublicAccessBlock",
+          "s3:GetBucketPublicAccessBlock",
+          "s3:PutBucketVersioning",
+          "s3:PutEncryptionConfiguration",
         ]
         Resource = [
           "arn:aws:s3:::astra-*",
@@ -311,6 +345,10 @@ resource "aws_iam_role_policy" "ecr_scoped" {
   name = "ecr-stack-management"
   role = aws_iam_role.github_oidc.name
 
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -329,6 +367,247 @@ resource "aws_iam_role_policy" "ecr_scoped" {
       ]
       Resource = "arn:aws:ecr:*:*:repository/astra-*"
     }]
+  })
+}
+
+# RDS instance/subnet-group management for the stack's MySQL database,
+# plus read access to the Secrets Manager secret that RDS auto-creates
+# when manage_master_user_password is enabled (Terraform reads it back
+# into state after creation).
+resource "aws_iam_role_policy" "rds_scoped" {
+  name = "rds-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Describe/List calls don't support resource-level scoping the way
+        # Create/Delete/Modify do - IAM evaluates them against all RDS
+        # resources in the account regardless of any ARN filter here.
+        Sid    = "RdsDescribe"
+        Effect = "Allow"
+        Action = [
+          "rds:DescribeDBInstances",
+          "rds:DescribeDBSubnetGroups",
+          "rds:ListTagsForResource",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "RdsInstanceManage"
+        Effect = "Allow"
+        Action = [
+          "rds:CreateDBInstance",
+          "rds:DeleteDBInstance",
+          "rds:ModifyDBInstance",
+          "rds:AddTagsToResource",
+          "rds:RemoveTagsFromResource",
+        ]
+        Resource = [
+          "arn:aws:rds:*:*:db:astra-*",
+          "arn:aws:rds:*:*:subgrp:astra-*",
+        ]
+      },
+      {
+        Sid    = "RdsSubnetGroupManage"
+        Effect = "Allow"
+        Action = [
+          "rds:CreateDBSubnetGroup",
+          "rds:DeleteDBSubnetGroup",
+          "rds:ModifyDBSubnetGroup",
+          "rds:AddTagsToResource",
+          "rds:RemoveTagsFromResource",
+        ]
+        Resource = "arn:aws:rds:*:*:subgrp:astra-*"
+      },
+      {
+        Sid    = "RdsManagedSecretManage"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:CreateSecret",
+          "secretsmanager:DeleteSecret",
+          "secretsmanager:TagResource",
+          "secretsmanager:UntagResource",
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:UpdateSecret",
+        ]
+        Resource = "arn:aws:secretsmanager:*:*:secret:rds!db-*"
+      },
+      {
+        Sid    = "RdsManagedSecretKms"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:ReEncryptFrom",
+          "kms:ReEncryptTo",
+          "kms:GenerateDataKey",
+          "kms:CreateGrant",
+          "kms:DescribeKey",
+        ]
+        Resource = "*"
+        Condition = {
+          StringLike = {
+            "kms:ViaService" = "secretsmanager.*.amazonaws.com"
+          }
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "iot_scoped" {
+  name = "iot-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "IotThingManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateThing",
+          "iot:DeleteThing",
+          "iot:DescribeThing",
+          "iot:UpdateThing",
+        ]
+        Resource = "arn:aws:iot:*:*:thing/*"
+      },
+      {
+        Sid    = "IotPolicyManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreatePolicy",
+          "iot:DeletePolicy",
+          "iot:GetPolicy",
+          "iot:ListPolicyVersions",
+          "iot:ListTargetsForPolicy",
+          "iot:ListTagsForResource",
+        ]
+        Resource = "arn:aws:iot:*:*:policy/*"
+      },
+      {
+        Sid    = "IotCertificateCreate"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateCertificateFromCsr",
+          "iot:CreateKeysAndCertificate",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "IotCertificateManage"
+        Effect = "Allow"
+        Action = [
+          "iot:DeleteCertificate",
+          "iot:DescribeCertificate",
+          "iot:UpdateCertificate",
+        ]
+        Resource = "arn:aws:iot:*:*:cert/*"
+      },
+      {
+        Sid    = "IotAttachmentManage"
+        Effect = "Allow"
+        Action = [
+          "iot:AttachPolicy",
+          "iot:DetachPolicy",
+          "iot:AttachThingPrincipal",
+          "iot:DetachThingPrincipal",
+          "iot:ListAttachedPolicies",
+          "iot:ListThingPrincipals",
+          "iot:ListPrincipalThings",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "IotEndpointRead"
+        Effect   = "Allow"
+        Action   = "iot:DescribeEndpoint"
+        Resource = "*"
+      },
+      {
+        # Account/region-wide singleton config, not scoped to any one resource.
+        Sid    = "IotIndexingConfigManage"
+        Effect = "Allow"
+        Action = [
+          "iot:GetIndexingConfiguration",
+          "iot:UpdateIndexingConfiguration",
+        ]
+        Resource = "*"
+      },
+      {
+        # ListTopicRules doesn't support resource-level scoping - same
+        # Describe/List pattern as RdsDescribe above.
+        Sid      = "IotTopicRuleList"
+        Effect   = "Allow"
+        Action   = "iot:ListTopicRules"
+        Resource = "*"
+      },
+      {
+        Sid    = "IotTopicRuleManage"
+        Effect = "Allow"
+        Action = [
+          "iot:CreateTopicRule",
+          "iot:DeleteTopicRule",
+          "iot:GetTopicRule",
+          "iot:ReplaceTopicRule",
+          "iot:ListTagsForResource",
+          "iot:TagResource",
+          "iot:UntagResource",
+        ]
+        Resource = "arn:aws:iot:*:*:rule/*"
+      },
+    ]
+  })
+}
+
+# Lambda function/layer management for the OEE ingest pipeline, plus the
+# resource-policy permission the IoT Rule needs to invoke the function.
+resource "aws_iam_role_policy" "lambda_scoped" {
+  name = "lambda-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "LambdaFunctionManage"
+        Effect = "Allow"
+        Action = [
+          # Get*/List* granted broadly (still scoped to astra-* function
+          # names below) because the provider's Read for aws_lambda_function
+          # probes several related sub-resources (code signing config, event
+          # invoke config, concurrency, policy, versions, tags) and drip-feeding
+          # one missing action per CI run isn't worth the round-trips.
+          "lambda:Get*",
+          "lambda:List*",
+          "lambda:CreateFunction",
+          "lambda:DeleteFunction",
+          "lambda:UpdateFunctionCode",
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:TagResource",
+          "lambda:UntagResource",
+          "lambda:AddPermission",
+          "lambda:RemovePermission",
+        ]
+        Resource = "arn:aws:lambda:*:*:function:astra-*"
+      },
+      {
+        Sid    = "LambdaLayerManage"
+        Effect = "Allow"
+        Action = [
+          "lambda:PublishLayerVersion",
+          "lambda:DeleteLayerVersion",
+          "lambda:Get*",
+          "lambda:List*",
+        ]
+        Resource = "arn:aws:lambda:*:*:layer:astra-*"
+      },
+    ]
   })
 }
 

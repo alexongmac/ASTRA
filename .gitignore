@@ -50,3 +50,17 @@ terraform.rc
 # Optional: ignore plan files saved before destroying Terraform configuration
 # Uncomment the line below if you want to ignore planout files.
 # planout
+
+# IoT device private key/certificate pulled from terraform output - never commit
+certs/
+
+# Lambda build artifacts - zipped by terraform from source, not tracked
+lambda/*.zip
+lambda/layer/
+
+# DB dumps and exported query results - local working data, not source
+*.sql
+*.csv
+
+# migrations/*.sql are tracked schema/seed scripts, not throwaway dumps
+!migrations/*.sql

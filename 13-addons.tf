@@ -33,6 +33,28 @@ resource "aws_eks_addon" "cert_manager" {
 
   resolve_conflicts_on_update = "OVERWRITE"
 
+  # Explicit resources for all three components - the addon's own defaults
+  # don't set a CPU limit, which fails Kyverno's require-resource-limits
+  # policy (kyverno-require-resource-limits.yaml).
+  configuration_values = jsonencode({
+    resources = {
+      requests = { cpu = "10m", memory = "32Mi" }
+      limits   = { cpu = "100m", memory = "128Mi" }
+    }
+    cainjector = {
+      resources = {
+        requests = { cpu = "10m", memory = "32Mi" }
+        limits   = { cpu = "100m", memory = "128Mi" }
+      }
+    }
+    webhook = {
+      resources = {
+        requests = { cpu = "10m", memory = "32Mi" }
+        limits   = { cpu = "100m", memory = "64Mi" }
+      }
+    }
+  })
+
   depends_on = [aws_eks_node_group.general]
 
 }
@@ -51,6 +73,15 @@ resource "aws_eks_addon" "ext_dns" {
   addon_name   = "external-dns"
 
   resolve_conflicts_on_update = "OVERWRITE"
+
+  # Default addon config omits a CPU limit, failing Kyverno's
+  # require-resource-limits policy (kyverno-require-resource-limits.yaml).
+  configuration_values = jsonencode({
+    resources = {
+      requests = { cpu = "10m", memory = "32Mi" }
+      limits   = { cpu = "100m", memory = "64Mi" }
+    }
+  })
 
   depends_on = [aws_eks_node_group.general]
 }
