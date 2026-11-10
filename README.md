@@ -175,6 +175,23 @@ manifest if any CRD it references doesn't exist yet (e.g. a ClusterPolicy
 before Kyverno has synced), which blocked `terraform plan` entirely. Use
 the branch matching the cluster: `develop` for development, `main` for production.
 
+### Option A: one file (development only)
+
+argocd-app-deploy.yaml bundles astra-project.yaml, traefik-app.yaml, and
+root-app.yaml into a single multi-document manifest, with targetRevision
+already set to `develop` so the separate `kubectl patch` below isn't needed:
+
+kubectl apply -f argocd-app-deploy.yaml
+
+kubectl applies all three documents immediately but doesn't wait for Traefik
+to finish syncing before root-app's comparison runs - if that first sync
+fails on the missing traefik IngressClass, just re-run the same command once
+Traefik is synced (`kubectl get application traefik -n argocd`); astra-root's
+retry policy (limit 5, backoff) usually recovers on its own anyway. For
+production, don't use this file (it's pinned to `develop`) - use Option B.
+
+### Option B: step by step (any environment)
+
 the AppProject every Application references:
 
 kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/astra-project.yaml
