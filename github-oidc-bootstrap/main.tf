@@ -49,14 +49,6 @@ resource "aws_iam_role" "github_oidc" {
   name               = var.github_oidc_role_name
   assume_role_policy = data.aws_iam_policy_document.github_trust.json
 
-  # CI authenticates to AWS solely by assuming this role via OIDC - if a
-  # destroy ever deletes it, every future CI run (including the destroy
-  # itself, mid-run) loses the only credential it has, and recreating it
-  # requires a one-time manual bootstrap with real AWS credentials. Refuse
-  # to destroy this one resource so that scenario can't happen again.
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 # No managed policies attached directly: every permission this role needs

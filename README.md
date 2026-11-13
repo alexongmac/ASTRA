@@ -6,22 +6,31 @@
 
 ### day to day
 
-- terraform init -backend-config="key=astra/development.tfstate"
-- terraform init -backend-config="key=astra/development.tfstate"
+- terraform init -reconfigure -backend-config=key=astra/development.tfstate
+- terraform init -reconfigure -backend-config=key=astra/production.tfstate
 
-- terraform apply -var-file=envs/development.tfvars
-- terraform apply -var-file=envs/production.tfvars
+-reconfigure matters when switching between environments: without it,
+Terraform offers to copy the current state into the new key, and answering
+"yes" would overwrite prod's state with dev's (or vice versa).
 
-### State files will land at s3 bucket:
+- terraform apply -auto-approve -var-file=envs/development.tfvars
+- terraform apply -auto-approve -var-file=envs/production.tfvars
 
-- astra-env/dev/astra/terraform.tfstate
-- astra-env/prod/astra/terraform.tfstate
+Review the plan before typing "yes" - especially any destroy or
+"must be replaced" lines.
+
+### State files will land at s3 bucket `sctp-tfstate-ce13`:
+
+- astra/development.tfstate
+- astra/production.tfstate
 
 ### Terraform Destroy
 
 please take note of the git branch must be in "develop"
 
-terraform destroy -auto-approve -var-file="envs/development.tfvars
+terraform destroy -auto-approve -var-file="envs/development.tfvars"
+
+terraform destroy -auto-approve -var-file="envs/production.tfvars"
 
 ### Kyverno policy:
 
@@ -31,8 +40,6 @@ kubectl get polr -A --no-headers | awk '{fail[$1]+=$6; total[$1]++} END {for (ns
 ### Get Grafana 'admin' user password by running:
 
 kubectl --namespace monitoring get secrets kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
-
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
 ### CloudWatch for audit logging who did what, when, via the K8s API
 
@@ -65,7 +72,7 @@ aws logs get-query-results --query-id <id>.
 
 ### some of the aws eks command:
 
-- aws eks update-kubeconfig --region us-east-1 --name astra-eks-development-cluster --profile <username>
+- aws eks update-kubeconfig --region us-east-1 --name astra-eks-development-cluster --profile <aws_username>
 
 - aws eks describe-cluster --name astra-eks-development-cluster --output json
 
@@ -73,10 +80,7 @@ aws logs get-query-results --query-id <id>.
 
 - kubectl cluster-info dump
 
-### ArgoCD Installation
-
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+- kubectl get pods -n <namespace> -l app.kubernetes.io/name=<app name>
 
 ### Check ArgoCD is installed
 
@@ -90,7 +94,7 @@ kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.pas
 
 ### Use this command to access ArgoCD UI on your local machine on port 8080
 
-❯ kubectl get svc -n argocd
+kubectl get svc -n argocd
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 open browser type: localhost:8080/
 
@@ -119,7 +123,7 @@ kubectl port-forward pod/rds-proxy 3306:3306
 
 Connect via Workbench to 127.0.0.1:3306, user dbadmin, schema astradb, password from Secrets Manager.
 
-when done, clean up
+### when done, clean up
 
 kubectl delete -f rds-access.yaml
 kubectl delete -f rds-proxy.yaml
@@ -144,6 +148,8 @@ kubectl exec rds-access -- mysql \
 ### Check Trivy operator pod status
 
 kubectl get pods -n trivy-system
+
+kubectl get vulnerabilityreports -A -o wide
 
 ### Running and healthy. It automatically scans workloads as they're created/updated — no manual trigger needed for that. To see its actual scan results right now:
 
@@ -214,3 +220,9 @@ kubectl patch application astra-root -n argocd --type merge -p '{"spec":{"source
 ### once applied, ArgoCD takes over syncing everything in ASTRA_argocd's Applications/ folder automatically
 
 kubectl get applications -n argocd
+
+### update argocd via kubectl, you have two options without pushing to git:
+
+kubectl patch application <applications> -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":false}}}}'
+kubectl apply -f <manifest file>.yaml
+kubectl patch application <applications> -n argocd --type merge -p '{"operation":{"sync":{}}}'
