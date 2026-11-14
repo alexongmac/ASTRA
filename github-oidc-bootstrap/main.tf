@@ -516,6 +516,8 @@ resource "aws_iam_role_policy" "iot_scoped" {
           "iot:ListPolicyVersions",
           "iot:ListTargetsForPolicy",
           "iot:ListTagsForResource",
+          "iot:TagResource",
+          "iot:UntagResource",
         ]
         Resource = "arn:aws:iot:*:*:policy/*"
       },
