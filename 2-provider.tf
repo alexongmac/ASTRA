@@ -3,9 +3,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project = "capstone-project-group-01"
+      Project     = "capstone-project-group-01"
       Environment = var.environment
-      Team = local.team_name
+      Team        = local.team_name
     }
   }
 }

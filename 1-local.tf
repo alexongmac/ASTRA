@@ -12,5 +12,5 @@ locals {
   thing_name        = "nodered-bridge"
   mqtt_client_id    = "mosquitto-bridge"
   mqtt_topic_prefix = "r2d2"
-  team_name          = "astra"
+  team_name         = "astra"
 }
