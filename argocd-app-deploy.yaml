@@ -1,0 +1,137 @@
+# Bootstrap manifest bundling ASTRA_argocd's bootstrap/ folder into one
+# `kubectl apply -f argocd-app-deploy.yaml`. Mirrors astra-project.yaml,
+# traefik-app.yaml, and root-app.yaml (with targetRevision hardcoded to
+# develop so the separate `kubectl patch` step isn't needed). See README.md
+# for why these three live outside Terraform and outside ASTRA_argocd's
+# Applications/ folder.
+#
+# Note: kubectl applies all three documents immediately, but doesn't wait
+# for Traefik to finish syncing before the root app starts its comparison.
+# If root-app's sync fails because the traefik IngressClass doesn't exist
+# yet, re-run `kubectl apply -f argocd-app-deploy.yaml` once Traefik is
+# synced (kubectl get application traefik -n argocd) - ArgoCD's retry
+# policy on astra-root (limit 5, backoff) usually recovers on its own.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: astra
+  namespace: argocd
+spec:
+  description: ASTRA cluster workloads (monitoring, policy, networking, RDS tooling)
+  sourceRepos:
+    - "https://github.com/alexongmac/ASTRA_argocd.git"
+    - "https://aws.github.io/eks-charts"
+    - "https://traefik.github.io/charts"
+    - "https://prometheus-community.github.io/helm-charts"
+    - "https://grafana.github.io/helm-charts"
+    - "https://kubernetes.github.io/autoscaler"
+    - "https://kyverno.github.io/kyverno/"
+    - "https://aquasecurity.github.io/helm-charts/"
+  destinations:
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+# Lives outside Applications/ synced by astra-root. The traefik ingresses in
+# Applications/ reference ingressClassName: traefik, and the AWS LB
+# controller's admission webhook rejects an ingress whose IngressClass
+# doesn't exist yet - which happens during astra-root's server-side-diff
+# comparison, before any sync runs. So Traefik (and its IngressClass) must
+# be installed independently and first, or it would deadlock its own
+# ingresses' comparison inside the same app.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+spec:
+  project: astra
+  source:
+    repoURL: https://traefik.github.io/charts
+    chart: traefik
+    targetRevision: 42.2.0
+    helm:
+      releaseName: traefik
+      valuesObject:
+        deployment:
+          replicas: 2
+        resources:
+          requests:
+            cpu: 50m
+            memory: 90Mi
+          limits:
+            cpu: 200m
+            memory: 180Mi
+        service:
+          type: LoadBalancer
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-type: nlb
+            service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+            service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+        ingressClass:
+          enabled: true
+          isDefaultClass: true
+        providers:
+          kubernetesCRD:
+            enabled: true
+          kubernetesIngress:
+            enabled: true
+        ingressRoute:
+          dashboard:
+            enabled: false # keep the dashboard off unless you secure it
+        metrics:
+          prometheus:
+            service:
+              enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: astra-root
+  namespace: argocd
+  annotations:
+    # Client-side diff fails on the child Application CRDs with
+    # ".status.observedGeneration: field not declared in schema", blocking
+    # comparison entirely. Server-side diff offloads the merge to the API
+    # server, which has the correct schema for the field.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: astra
+  source:
+    repoURL: https://github.com/alexongmac/ASTRA_argocd.git
+    targetRevision: develop
+    path: Applications
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m

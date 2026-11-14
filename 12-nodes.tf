@@ -39,10 +39,32 @@ resource "aws_launch_template" "nodes" {
   name_prefix   = "${local.eks_name}-ec2"
   instance_type = "t4g.large"
 
+  # The AMI's default ~20 GiB root volume fills up with the monitoring/policy
+  # stack's images and hits kubelet DiskPressure evictions.
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size           = 50
+      volume_type           = "gp3"
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
+  # Provider default_tags don't propagate into tag_specifications, so the
+  # instances and volumes the node group launches need Project set here.
   tag_specifications {
     resource_type = "instance"
     tags = {
-      Name = "${local.eks_name}-ec2"
+      Name    = "${local.eks_name}-ec2"
+      Project = "capstone-project-group-01"
+    }
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = {
+      Project = "capstone-project-group-01"
     }
   }
 }

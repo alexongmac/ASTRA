@@ -6,22 +6,31 @@
 
 ### day to day
 
-- terraform init -backend-config="key=astra/development.tfstate"
-- terraform init -backend-config="key=astra/development.tfstate"
+- terraform init -reconfigure -backend-config=key=astra/development.tfstate
+- terraform init -reconfigure -backend-config=key=astra/production.tfstate
 
-- terraform apply -var-file=envs/development.tfvars
-- terraform apply -var-file=envs/production.tfvars
+-reconfigure matters when switching between environments: without it,
+Terraform offers to copy the current state into the new key, and answering
+"yes" would overwrite prod's state with dev's (or vice versa).
 
-### State files will land at s3 bucket:
+- terraform apply -auto-approve -var-file=envs/development.tfvars
+- terraform apply -auto-approve -var-file=envs/production.tfvars
 
-- astra-env/dev/astra/terraform.tfstate
-- astra-env/prod/astra/terraform.tfstate
+Review the plan before typing "yes" - especially any destroy or
+"must be replaced" lines.
+
+### State files will land at s3 bucket `sctp-tfstate-ce13`:
+
+- astra/development.tfstate
+- astra/production.tfstate
 
 ### Terraform Destroy
 
 please take note of the git branch must be in "develop"
 
-terraform destroy -auto-approve -var-file="envs/development.tfvars
+terraform destroy -auto-approve -var-file="envs/development.tfvars"
+
+terraform destroy -auto-approve -var-file="envs/production.tfvars"
 
 ### Kyverno policy:
 
@@ -31,8 +40,6 @@ kubectl get polr -A --no-headers | awk '{fail[$1]+=$6; total[$1]++} END {for (ns
 ### Get Grafana 'admin' user password by running:
 
 kubectl --namespace monitoring get secrets kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
-
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
 ### CloudWatch for audit logging who did what, when, via the K8s API
 
@@ -63,31 +70,9 @@ Then fetch results with
 
 aws logs get-query-results --query-id <id>.
 
-helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-    --namespace monitoring \
-    --create-namespace \
-    --set prometheus.prometheusSpec.resources.requests.cpu=100m \
-    --set prometheus.prometheusSpec.resources.requests.memory=256Mi \
-    --set prometheus.prometheusSpec.resources.limits.cpu=500m \
-    --set prometheus.prometheusSpec.resources.limits.memory=512Mi \
-    --set prometheus.prometheusSpec.retention=6h \
-    --set alertmanager.alertmanagerSpec.resources.requests.cpu=25m \
-    --set alertmanager.alertmanagerSpec.resources.requests.memory=64Mi \
-    --set alertmanager.alertmanagerSpec.resources.limits.cpu=100m \
-    --set alertmanager.alertmanagerSpec.resources.limits.memory=128Mi \
-    --set grafana.resources.requests.cpu=50m \
-    --set grafana.resources.requests.memory=256Mi \
-    --set grafana.resources.limits.cpu=200m \
-    --set grafana.resources.limits.memory=512Mi \
-    --set kubeControllerManager.enabled=true \
-    --set kubeScheduler.enabled=true \
-    --set kubeEtcd.enabled=true \
-    --set kubeProxy.enabled=true \
-    --wait --timeout 600s
-
 ### some of the aws eks command:
 
-- aws eks update-kubeconfig --region us-east-1 --name astra-eks-development-cluster --profile <username>
+- aws eks update-kubeconfig --region us-east-1 --name astra-eks-development-cluster --profile <aws_username>
 
 - aws eks describe-cluster --name astra-eks-development-cluster --output json
 
@@ -95,23 +80,11 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
 
 - kubectl cluster-info dump
 
-### ArgoCD Installation
-
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-helm upgrade --install loki grafana/loki \
-  --version 7.5.0 \
-  --namespace monitoring \
-  --create-namespace \
-  -f loki-values.yaml \
-  --wait --timeout 600s
-
-====================================
+- kubectl get pods -n <namespace> -l app.kubernetes.io/name=<app name>
 
 ### Check ArgoCD is installed
 
-❯ kubectl get pods,svc,secrets -n argocd
+kubectl get pods,svc,secrets -n argocd
 
 ### to get the secrets
 
@@ -121,7 +94,7 @@ kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.pas
 
 ### Use this command to access ArgoCD UI on your local machine on port 8080
 
-❯ kubectl get svc -n argocd
+kubectl get svc -n argocd
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 open browser type: localhost:8080/
 
@@ -150,7 +123,7 @@ kubectl port-forward pod/rds-proxy 3306:3306
 
 Connect via Workbench to 127.0.0.1:3306, user dbadmin, schema astradb, password from Secrets Manager.
 
-when done, clean up
+### when done, clean up
 
 kubectl delete -f rds-access.yaml
 kubectl delete -f rds-proxy.yaml
@@ -176,6 +149,8 @@ kubectl exec rds-access -- mysql \
 
 kubectl get pods -n trivy-system
 
+kubectl get vulnerabilityreports -A -o wide
+
 ### Running and healthy. It automatically scans workloads as they're created/updated — no manual trigger needed for that. To see its actual scan results right now:
 
 kubectl get vulnerabilityreports -A -o wide
@@ -189,3 +164,65 @@ kubectl get polr -n kube-system | grep cluster-autoscaler
 kubectl describe polr <uid> -n kube-system
 
 kubectl describe polr 6d200205-b172-46c8-b8e9-1c92f228ff70 -n kube-system
+
+### to start argocd, we need to follow:
+
+terraform init -upgrade -backend-config="key=astra/development.tfstate" -reconfigure
+
+terraform plan -var-file="envs/development.tfvars" -target="helm_release.argocd"
+
+terraform apply -var-file="envs/development.tfvars" -target="helm_release.argocd"
+
+### once ArgoCD itself is running, bootstrap the astra AppProject, Traefik, and the root Application
+
+these come from ASTRA_argocd's bootstrap/ folder and are applied directly via
+kubectl, not Terraform - kubectl_manifest's plan-time validation rejects a
+manifest if any CRD it references doesn't exist yet (e.g. a ClusterPolicy
+before Kyverno has synced), which blocked `terraform plan` entirely. Use
+the branch matching the cluster: `develop` for development, `main` for production.
+
+### Option A: one file (development only)
+
+argocd-app-deploy.yaml bundles astra-project.yaml, traefik-app.yaml, and
+root-app.yaml into a single multi-document manifest, with targetRevision
+already set to `develop` so the separate `kubectl patch` below isn't needed:
+
+kubectl apply -f argocd-app-deploy.yaml
+
+kubectl applies all three documents immediately but doesn't wait for Traefik
+to finish syncing before root-app's comparison runs - if that first sync
+fails on the missing traefik IngressClass, just re-run the same command once
+Traefik is synced (`kubectl get application traefik -n argocd`); astra-root's
+retry policy (limit 5, backoff) usually recovers on its own anyway. For
+production, don't use this file (it's pinned to `develop`) - use Option B.
+
+### Option B: step by step (any environment)
+
+the AppProject every Application references:
+
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/astra-project.yaml
+
+Traefik must be installed BEFORE the root app - the traefik-classed ingresses
+in Applications/ fail ArgoCD's server-side-diff comparison if the traefik
+IngressClass doesn't exist yet (the AWS LB controller webhook rejects them),
+which would deadlock the whole root app. So Traefik is applied standalone here:
+
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/traefik-app.yaml
+
+then the root app-of-apps that syncs everything in Applications/:
+
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/root-app.yaml
+
+### IMPORTANT: root-app.yaml ships with targetRevision: main. On the development cluster, change it to develop or the app-of-apps tracks the wrong branch:
+
+kubectl patch application astra-root -n argocd --type merge -p '{"spec":{"source":{"targetRevision":"develop"}}}'
+
+### once applied, ArgoCD takes over syncing everything in ASTRA_argocd's Applications/ folder automatically
+
+kubectl get applications -n argocd
+
+### update argocd via kubectl, you have two options without pushing to git:
+
+kubectl patch application <applications> -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":false}}}}'
+kubectl apply -f <manifest file>.yaml
+kubectl patch application <applications> -n argocd --type merge -p '{"operation":{"sync":{}}}'

@@ -10,6 +10,7 @@ data "aws_iam_policy_document" "aws_load_balancer_controller" {
       "ec2:DescribeVpcs",
       "ec2:DescribeVpcPeeringConnections",
       "ec2:DescribeSubnets",
+      "ec2:DescribeRouteTables",
       "ec2:DescribeSecurityGroups",
       "ec2:DescribeInstances",
       "ec2:DescribeNetworkInterfaces",
@@ -286,7 +287,7 @@ resource "aws_eks_pod_identity_association" "aws_load_balancer_controller" {
   depends_on = [aws_eks_addon.pod_identity_agent]
 }
 
-# The aws-load-balancer-controller and ingress-nginx charts themselves are
+# The aws-load-balancer-controller and Traefik charts themselves are
 # installed from a separate platform/app repo (e.g. via ArgoCD), not from
 # this infra repo or Terraform helm_release. The IAM role/policy/pod-identity
 # association above are the AWS-side prerequisite: whichever tool installs

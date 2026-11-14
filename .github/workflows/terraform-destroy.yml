@@ -49,14 +49,24 @@ jobs:
         continue-on-error: true
         run: aws eks update-kubeconfig --region "${{ vars.AWS_REGION }}" --name "astra-eks-${ENVIRONMENT}-cluster"
 
-      - name: Helm uninstall releases (best-effort)
+      - name: Delete ArgoCD Applications (stop self-heal before uninstalling charts)
         continue-on-error: true
         run: |
-          helm uninstall ingress-nginx -n ingress-nginx || true
-          helm uninstall kube-prometheus-stack -n monitoring || true
-          helm uninstall loki -n monitoring || true
-          helm uninstall cluster-autoscaler -n kube-system || true
-          helm uninstall aws-load-balancer-controller -n kube-system || true
+          kubectl delete application --all -n argocd || true
+
+      # Uninstalls every release ArgoCD/ASTRA_argocd deployed, whatever it's
+      # named, so this list never drifts out of sync with Applications/.
+      # ArgoCD's own release lives outside ASTRA_argocd (installed by this
+      # repo's helm_release.argocd), so it's excluded here and handled by
+      # the dedicated "Uninstall ArgoCD" step below instead.
+      - name: Helm uninstall ArgoCD-managed releases (best-effort)
+        continue-on-error: true
+        run: |
+          helm list --all-namespaces --no-headers | awk '$2 != "argocd" {print $1, $2}' | \
+          while read -r name namespace; do
+            echo "Uninstalling $name in $namespace"
+            helm uninstall "$name" -n "$namespace" || true
+          done
 
       - name: Uninstall ArgoCD (best-effort)
         continue-on-error: true

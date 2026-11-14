@@ -43,3 +43,24 @@ resource "aws_eks_access_policy_association" "teammates_admin" {
 
   depends_on = [aws_eks_access_entry.teammates]
 }
+
+# The GitHub Actions OIDC role needs cluster access so CI's kubernetes/helm
+# providers can manage kubernetes_namespace.argocd and helm_release.argocd -
+# without this, those resources fail with "Unauthorized" since the role can
+# reach the AWS API but has no RBAC inside the cluster.
+resource "aws_eks_access_entry" "github_oidc" {
+  cluster_name  = aws_eks_cluster.eks.name
+  principal_arn = module.github_oidc_bootstrap.github_oidc_role_arn
+}
+
+resource "aws_eks_access_policy_association" "github_oidc_admin" {
+  cluster_name  = aws_eks_cluster.eks.name
+  principal_arn = module.github_oidc_bootstrap.github_oidc_role_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.github_oidc]
+}

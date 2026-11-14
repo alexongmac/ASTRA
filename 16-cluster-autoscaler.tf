@@ -75,6 +75,19 @@ resource "aws_autoscaling_group_tag" "cluster_autoscaler_enabled" {
   }
 }
 
+resource "aws_autoscaling_group_tag" "project" {
+  # The EKS-managed node group creates its own ASG outside default_tags'
+  # reach, so it (and its instances, via propagate_at_launch) needs this
+  # tag set explicitly here instead.
+  autoscaling_group_name = tolist(aws_eks_node_group.general.resources)[0].autoscaling_groups[0].name
+
+  tag {
+    key                 = "Project"
+    value               = "capstone-project-group-01"
+    propagate_at_launch = true
+  }
+}
+
 resource "aws_autoscaling_group_tag" "cluster_autoscaler_owned" {
   autoscaling_group_name = tolist(aws_eks_node_group.general.resources)[0].autoscaling_groups[0].name
 

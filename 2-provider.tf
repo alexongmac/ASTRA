@@ -1,5 +1,35 @@
 provider "aws" {
   region = local.region
+
+  default_tags {
+    tags = {
+      Project     = "capstone-project-group-01"
+      Environment = var.environment
+      Team        = local.team_name
+    }
+  }
+}
+
+provider "kubernetes" {
+  host                   = aws_eks_cluster.eks.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.eks.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.eks.name, "--region", local.region]
+  }
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = aws_eks_cluster.eks.endpoint
+    cluster_ca_certificate = base64decode(aws_eks_cluster.eks.certificate_authority[0].data)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.eks.name, "--region", local.region]
+    }
+  }
 }
 
 terraform {
@@ -11,6 +41,14 @@ terraform {
     time = {
       source  = "hashicorp/time"
       version = "~> 0.13"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.35"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.17"
     }
   }
 
@@ -29,3 +67,6 @@ terraform {
 
   required_version = ">= 1.9"
 }
+
+
+
