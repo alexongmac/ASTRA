@@ -44,12 +44,5 @@ resource "aws_vpc_security_group_ingress_rule" "cluster_self" {
   security_group_id            = data.aws_security_group.cluster.id
   referenced_security_group_id = data.aws_security_group.cluster.id
   ip_protocol                  = "-1"
-  description                  = "Control-plane<->node and node<->node traffic"
-}
-
-resource "aws_vpc_security_group_egress_rule" "cluster_all" {
-  security_group_id = data.aws_security_group.cluster.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "-1"
-  description       = "Nodes need outbound access to AWS APIs (EC2, SSM, ECR, etc.) and the internet"
+  description                  = "Control-plane-node and node-node traffic"
 }
