@@ -28,3 +28,28 @@ resource "aws_eks_cluster" "eks" {
 
   depends_on = [aws_iam_role_policy_attachment.cluster_policy]
 }
+
+# EKS auto-creates and owns this cluster security group (no security_group_ids
+# set above), so Terraform never created it - but its rules are still real
+# infrastructure that something outside Terraform has repeatedly wiped,
+# leaving nodes NotReady (no control-plane<->node traffic, no node->internet
+# egress). Managing its rules here means `terraform apply` can always restore
+# them, instead of a one-off `aws ec2 authorize-security-group-*` that has
+# nothing to re-assert it after the next wipe.
+data "aws_security_group" "cluster" {
+  id = aws_eks_cluster.eks.vpc_config[0].cluster_security_group_id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cluster_self" {
+  security_group_id            = data.aws_security_group.cluster.id
+  referenced_security_group_id = data.aws_security_group.cluster.id
+  ip_protocol                  = "-1"
+  description                  = "Control-plane<->node and node<->node traffic"
+}
+
+resource "aws_vpc_security_group_egress_rule" "cluster_all" {
+  security_group_id = data.aws_security_group.cluster.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  description       = "Nodes need outbound access to AWS APIs (EC2, SSM, ECR, etc.) and the internet"
+}
