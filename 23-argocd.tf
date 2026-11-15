@@ -25,7 +25,49 @@ resource "helm_release" "argocd" {
     value = "true"
   }
 
+  # Kyverno's require-resource-limits policy (audit mode) flags every ArgoCD
+  # component - the chart ships with resources: {} on all of them by default.
+  values = [
+    yamlencode({
+      # application-controller tracks live state for every Application
+      # across the whole cluster (10+ apps here) - it OOMKilled at 512Mi,
+      # so it gets its own, larger ceiling instead of the shared default.
+      controller      = { resources = local.argocd_controller_resources }
+      dex             = { resources = local.argocd_default_resources }
+      redis           = { resources = local.argocd_default_resources }
+      redisSecretInit = { resources = local.argocd_default_resources }
+      server          = { resources = local.argocd_default_resources }
+      repoServer      = { resources = local.argocd_default_resources }
+      applicationSet  = { resources = local.argocd_default_resources }
+      notifications   = { resources = local.argocd_default_resources }
+    })
+  ]
+
   depends_on = [kubernetes_namespace.argocd]
+}
+
+locals {
+  argocd_default_resources = {
+    requests = {
+      cpu    = "100m"
+      memory = "128Mi"
+    }
+    limits = {
+      cpu    = "500m"
+      memory = "512Mi"
+    }
+  }
+
+  argocd_controller_resources = {
+    requests = {
+      cpu    = "250m"
+      memory = "256Mi"
+    }
+    limits = {
+      cpu    = "1000m"
+      memory = "1Gi"
+    }
+  }
 }
 
 # The astra AppProject and the "App of Apps" root Application (ASTRA_argocd's
