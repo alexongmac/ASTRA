@@ -58,7 +58,11 @@ jobs:
 
   build-and-push:
     needs: security-scan
-    runs-on: ubuntu-latest
+    # arm64 runner because the EKS nodes are Graviton: an image built on an
+    # x86 runner is rejected with "no match for platform in manifest".
+    # Building natively here rather than cross-building under QEMU, which
+    # took over 20 minutes for the same image.
+    runs-on: ubuntu-24.04-arm
     outputs:
       image: ${{ steps.image.outputs.image }}
 
@@ -87,24 +91,13 @@ jobs:
       - name: Install Snyk CLI
         uses: snyk/actions/setup@master
 
-      # The EKS nodes are Graviton (arm64) while GitHub's runners are x86, so
-      # a plain docker build produces an image the kubelet rejects with
-      # "no match for platform in manifest". QEMU plus buildx cross-builds it.
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build image
         id: image
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           IMAGE="$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
-          # --load leaves the image in the local daemon for the Snyk scan
-          # below; the separate push step sends it to ECR.
-          docker buildx build --platform linux/arm64 --load -t "$IMAGE" app/
+          docker build -t "$IMAGE" app/
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       # Scans the base image's OS packages, which the npm dependency scan in
