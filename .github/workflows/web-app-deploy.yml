@@ -63,9 +63,11 @@ jobs:
       image: ${{ steps.image.outputs.image }}
 
     # Same per-environment lock pattern as terraform-apply.yml - a develop
-    # push and a main push must never race each other's image tag.
+    # push and a main push must never race each other's image tag. The branch
+    # expression is repeated here rather than reusing env.ENVIRONMENT: the env
+    # context is not available when concurrency is evaluated.
     concurrency:
-      group: web-app-${{ env.ENVIRONMENT }}
+      group: web-app-${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
       cancel-in-progress: false
 
     steps:
