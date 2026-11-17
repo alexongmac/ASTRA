@@ -488,6 +488,42 @@ resource "aws_iam_role_policy" "rds_scoped" {
   })
 }
 
+# SQS queues backing the alarm ingest path: the IoT rules deliver to the
+# main queue and the worker consumes it, with a DLQ behind a redrive policy.
+resource "aws_iam_role_policy" "sqs_scoped" {
+  name = "sqs-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "SqsQueueManage"
+        Effect = "Allow"
+        Action = [
+          # GetQueueAttributes is needed even for a plan: the provider's Read
+          # for aws_sqs_queue fetches attributes to detect drift.
+          "sqs:CreateQueue",
+          "sqs:DeleteQueue",
+          "sqs:GetQueueAttributes",
+          "sqs:SetQueueAttributes",
+          "sqs:GetQueueUrl",
+          "sqs:ListQueueTags",
+          "sqs:TagQueue",
+          "sqs:UntagQueue",
+        ]
+        Resource = "arn:aws:sqs:*:*:astra-*"
+      },
+      {
+        Sid      = "SqsListQueues"
+        Effect   = "Allow"
+        Action   = ["sqs:ListQueues"]
+        Resource = "*"
+      },
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "iot_scoped" {
   name = "iot-stack-management"
   role = aws_iam_role.github_oidc.name
