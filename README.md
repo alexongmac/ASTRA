@@ -13,8 +13,8 @@
 Terraform offers to copy the current state into the new key, and answering
 "yes" would overwrite prod's state with dev's (or vice versa).
 
-- terraform apply -auto-approve -var-file=envs/development.tfvars
-- terraform apply -auto-approve -var-file=envs/production.tfvars
+- terraform apply --auto-approve -var-file=envs/development.tfvars
+- terraform apply --auto-approve -var-file=envs/production.tfvars
 
 Review the plan before typing "yes" - especially any destroy or
 "must be replaced" lines.
@@ -28,9 +28,21 @@ Review the plan before typing "yes" - especially any destroy or
 
 please take note of the git branch must be in "develop"
 
-terraform destroy -auto-approve -var-file="envs/development.tfvars"
+terraform destroy --auto-approve -var-file="envs/development.tfvars"
 
-terraform destroy -auto-approve -var-file="envs/production.tfvars"
+terraform destroy --auto-approve -var-file="envs/production.tfvars"
+
+### Getting Iot Certs from aws. Run this from the ASTRA directory
+
+cd /Users/alex/Desktop/ClassActivity/ASTRA
+
+terraform output -raw iot_certificate_pem > certs/nodered-bridge.crt
+terraform output -raw iot_private_key > certs/nodered-bridge.key
+terraform output -raw iot_endpoint > certs/iot-endpoint.txt
+curl -s https://www.amazontrust.com/repository/AmazonRootCA1.pem > certs/AmazonRootCA1.pem
+
+chmod 600 certs/nodered-bridge.key
+ls -l certs/
 
 ### Kyverno policy:
 

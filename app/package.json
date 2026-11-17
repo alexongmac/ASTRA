@@ -1,0 +1,39 @@
+{
+  "name": "app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "build:worker": "esbuild worker/index.ts --bundle --platform=node --target=node24 --format=cjs --packages=external --outfile=dist/worker.cjs",
+    "worker": "tsx worker/index.ts",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1170.0",
+    "@aws-sdk/client-sqs": "^3.1170.0",
+    "@prisma/adapter-mariadb": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "bcryptjs": "^3.0.3",
+    "next": "16.4.6",
+    "next-auth": "^5.0.0-beta.32",
+    "prisma": "^7.10.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "4.3.3",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "esbuild": "^0.28.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.6",
+    "tailwindcss": "4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}

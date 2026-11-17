@@ -596,47 +596,76 @@ resource "aws_iam_role_policy" "iot_scoped" {
   })
 }
 
-# Lambda function/layer management for the OEE ingest pipeline, plus the
-# resource-policy permission the IoT Rule needs to invoke the function.
-resource "aws_iam_role_policy" "lambda_scoped" {
-  name = "lambda-stack-management"
+# WAF web ACL and ACM certificate (with its Route53 DNS validation record)
+# for the web app's ALB.
+resource "aws_iam_role_policy" "web_app_edge_scoped" {
+  name = "web-app-edge-management"
   role = aws_iam_role.github_oidc.name
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "LambdaFunctionManage"
+        Sid    = "WafWebAclManage"
         Effect = "Allow"
         Action = [
-          # Get*/List* granted broadly (still scoped to astra-* function
-          # names below) because the provider's Read for aws_lambda_function
-          # probes several related sub-resources (code signing config, event
-          # invoke config, concurrency, policy, versions, tags) and drip-feeding
-          # one missing action per CI run isn't worth the round-trips.
-          "lambda:Get*",
-          "lambda:List*",
-          "lambda:CreateFunction",
-          "lambda:DeleteFunction",
-          "lambda:UpdateFunctionCode",
-          "lambda:UpdateFunctionConfiguration",
-          "lambda:TagResource",
-          "lambda:UntagResource",
-          "lambda:AddPermission",
-          "lambda:RemovePermission",
+          "wafv2:CreateWebACL",
+          "wafv2:UpdateWebACL",
+          "wafv2:DeleteWebACL",
+          "wafv2:GetWebACL",
+          "wafv2:ListTagsForResource",
+          "wafv2:TagResource",
+          "wafv2:UntagResource",
         ]
-        Resource = "arn:aws:lambda:*:*:function:astra-*"
+        # CreateWebACL/UpdateWebACL are also authorized against every
+        # managed rule group the ACL references.
+        Resource = [
+          "arn:aws:wafv2:*:*:regional/webacl/astra-*/*",
+          "arn:aws:wafv2:*:*:regional/managedruleset/*/*",
+        ]
       },
       {
-        Sid    = "LambdaLayerManage"
+        Sid      = "WafList"
+        Effect   = "Allow"
+        Action   = ["wafv2:ListWebACLs"]
+        Resource = "*"
+      },
+      {
+        # Certificate ARNs are random IDs, so these can't be name-scoped.
+        Sid    = "AcmCertificateManage"
         Effect = "Allow"
         Action = [
-          "lambda:PublishLayerVersion",
-          "lambda:DeleteLayerVersion",
-          "lambda:Get*",
-          "lambda:List*",
+          "acm:RequestCertificate",
+          "acm:DescribeCertificate",
+          "acm:GetCertificate",
+          "acm:ListCertificates",
+          "acm:ListTagsForCertificate",
+          "acm:AddTagsToCertificate",
+          "acm:RemoveTagsFromCertificate",
+          "acm:DeleteCertificate",
         ]
-        Resource = "arn:aws:lambda:*:*:layer:astra-*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Route53ValidationRecords"
+        Effect = "Allow"
+        Action = [
+          "route53:GetHostedZone",
+          "route53:ListResourceRecordSets",
+          "route53:ChangeResourceRecordSets",
+          "route53:ListTagsForResource",
+        ]
+        Resource = "arn:aws:route53:::hostedzone/Z00541411T1NGPV97B5C0"
+      },
+      {
+        Sid    = "Route53Lookup"
+        Effect = "Allow"
+        Action = [
+          "route53:ListHostedZones",
+          "route53:ListHostedZonesByName",
+          "route53:GetChange",
+        ]
+        Resource = "*"
       },
     ]
   })
