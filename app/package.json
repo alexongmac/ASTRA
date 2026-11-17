@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:worker": "esbuild worker/index.ts --bundle --platform=node --target=node24 --format=cjs --packages=external --outfile=dist/worker.cjs",
+    "build:worker": "esbuild worker/index.ts --bundle --platform=node --target=node24 --format=cjs --external:@prisma/client --external:.prisma --outfile=dist/worker.cjs",
     "worker": "tsx worker/index.ts",
     "seed": "tsx prisma/seed.ts"
   },

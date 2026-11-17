@@ -23,8 +23,11 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# The worker runs from the same image under a different command. It is bundled
-# with external packages, so it reuses the standalone tree's node_modules.
+# The worker runs from the same image under a different command. Its bundle
+# carries its own dependencies, because the standalone tree only holds what
+# Next.js traced from its own import graph - the worker is not part of that,
+# so nothing it imports would be copied here. Prisma stays external and does
+# come from the standalone tree, which has the generated client and engines.
 COPY --from=builder --chown=nextjs:nodejs /app/dist/worker.cjs ./dist/worker.cjs
 
 USER nextjs
