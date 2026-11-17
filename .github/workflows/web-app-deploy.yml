@@ -121,10 +121,14 @@ jobs:
     steps:
       # GITHUB_TOKEN is scoped to this repo only, so writing to
       # ASTRA_argocd needs a separate PAT with contents:write on that repo.
+      # ref matters: checkout defaults to the GitOps repo's default branch
+      # (main), but each ArgoCD Application tracks the branch matching its
+      # environment, so the image tag has to be committed there.
       - name: Checkout GitOps repo
         uses: actions/checkout@v4
         with:
           repository: alexongmac/ASTRA_argocd
+          ref: ${{ github.ref == 'refs/heads/main' && 'main' || 'develop' }}
           token: ${{ secrets.GITOPS_REPO_TOKEN }}
 
       - name: Install yq
