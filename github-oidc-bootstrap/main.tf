@@ -333,33 +333,63 @@ resource "aws_iam_role_policy" "s3_scoped" {
 }
 
 # ECR repo management for the image this stack's app CI pushes/pulls.
-resource "aws_iam_role_policy" "ecr_scoped" {
-  name = "ecr-stack-management"
-  role = aws_iam_role.github_oidc.name
-
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
+# A customer-managed policy rather than an inline one: a role's inline
+# policies share a 10,240-byte quota and this role is close to it, while
+# managed policies are counted separately (10 attachments, 6,144 bytes each).
+resource "aws_iam_policy" "ecr_scoped" {
+  name        = "${var.github_oidc_role_name}-ecr"
+  description = "ECR repository management and image push for the GitHub OIDC role"
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid    = "EcrRepoManage"
-      Effect = "Allow"
-      Action = [
-        "ecr:CreateRepository",
-        "ecr:DeleteRepository",
-        "ecr:DescribeRepositories",
-        "ecr:PutLifecyclePolicy",
-        "ecr:GetLifecyclePolicy",
-        "ecr:DeleteLifecyclePolicy",
-        "ecr:TagResource",
-        "ecr:UntagResource",
-        "ecr:ListTagsForResource",
-      ]
-      Resource = "arn:aws:ecr:*:*:repository/astra-*"
-    }]
+    Statement = [
+      {
+        Sid    = "EcrRepoManage"
+        Effect = "Allow"
+        Action = [
+          "ecr:CreateRepository",
+          "ecr:DeleteRepository",
+          "ecr:DescribeRepositories",
+          "ecr:PutLifecyclePolicy",
+          "ecr:GetLifecyclePolicy",
+          "ecr:DeleteLifecyclePolicy",
+          "ecr:TagResource",
+          "ecr:UntagResource",
+          "ecr:ListTagsForResource",
+        ]
+        Resource = "arn:aws:ecr:*:*:repository/astra-*"
+      },
+      {
+        # Docker login. This action is account-level and rejects any
+        # resource-level scoping, so it has to stand alone on "*".
+        Sid      = "EcrAuth"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        # Pushing the web app image built by web-app-deploy.yml, and the
+        # layer reads Docker performs to skip layers already present.
+        Sid    = "EcrImagePush"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+        ]
+        Resource = "arn:aws:ecr:*:*:repository/astra-*"
+      },
+    ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_scoped" {
+  role       = aws_iam_role.github_oidc.name
+  policy_arn = aws_iam_policy.ecr_scoped.arn
 }
 
 # RDS instance/subnet-group management for the stack's MySQL database,
