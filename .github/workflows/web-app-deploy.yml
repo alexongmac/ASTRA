@@ -150,17 +150,18 @@ jobs:
         env:
           IMAGE: ${{ needs.build-and-push.outputs.image }}
         run: |
-          # web-app/ is raw manifests, not a Helm chart (it's our own image,
-          # not a published chart), so this edits the Deployments directly
-          # instead of a valuesObject.image field. The file holds both the web
-          # and worker Deployments, which share one image, so this selects
-          # every document rather than only the first.
-          yq -i "select(.kind == \"Deployment\").spec.template.spec.containers[].image = \"${IMAGE}\"" web-app/deployment.yaml
+          # envs/<env>/web-app/ is raw manifests, not a Helm chart (it's our
+          # own image, not a published chart), so this edits the Deployments
+          # directly instead of a valuesObject.image field. The file holds both
+          # the web and worker Deployments, which share one image, so this
+          # selects every document rather than only the first.
+          yq -i "select(.kind == \"Deployment\").spec.template.spec.containers[].image = \"${IMAGE}\"" \
+            "envs/${ENVIRONMENT}/web-app/deployment.yaml"
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add web-app/deployment.yaml
+          git add "envs/${ENVIRONMENT}/web-app/deployment.yaml"
           git commit -m "Deploy web-app ${{ github.sha }} to ${{ env.ENVIRONMENT }}" || exit 0
           git push
