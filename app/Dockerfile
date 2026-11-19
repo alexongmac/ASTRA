@@ -19,6 +19,13 @@ ENV NODE_ENV=production
 
 RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
 
+# npm ships with the base image and is never used at runtime - the container
+# starts node directly - but its bundled libraries (undici, brace-expansion,
+# http-cache-semantics, postcss-selector-parser) account for every finding the
+# container scan reports. Removing it drops them and shrinks the attack surface.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    /usr/local/bin/npm /usr/local/bin/npx
+
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
