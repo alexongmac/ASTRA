@@ -88,8 +88,14 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Install Snyk CLI
-        uses: snyk/actions/setup@master
+      # snyk/actions/setup installs the x86 binary, which cannot run on this
+      # arm64 runner ("Exec format error"), so fetch the arm64 build directly.
+      - name: Install Snyk CLI (arm64)
+        run: |
+          curl -fsSL -o /usr/local/bin/snyk \
+            https://downloads.snyk.io/cli/stable/snyk-linux-arm64
+          chmod +x /usr/local/bin/snyk
+          snyk --version
 
       - name: Build image
         id: image
