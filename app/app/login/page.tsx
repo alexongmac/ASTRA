@@ -32,7 +32,9 @@ export default async function LoginPage({
 
   return (
     <main className="min-h-screen bg-slate-900 px-4 py-6">
-      <h1 className="text-sm font-semibold text-slate-100">R2D2 · Alarm Acknowledgement</h1>
+      <h1 className="text-sm font-semibold text-slate-100">
+        R2D2 · Operation Excellence
+      </h1>
 
       <div className="mx-auto mt-24 w-full max-w-sm rounded-lg border border-slate-700 bg-slate-800 p-6 shadow-sm">
         <form action={login} className="space-y-4">
@@ -63,7 +65,11 @@ export default async function LoginPage({
             />
           </div>
 
-          {error ? <p className="text-sm text-red-400">Invalid operator name or password.</p> : null}
+          {error ? (
+            <p className="text-sm text-red-400">
+              Invalid operator name or password.
+            </p>
+          ) : null}
 
           <button
             type="submit"
