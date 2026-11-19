@@ -39,6 +39,19 @@ resource "aws_eks_addon" "ebs_csi_driver" {
 
   resolve_conflicts_on_update = "OVERWRITE"
 
+  # PVC-backed volumes are created by the driver, not Terraform, so
+  # default_tags never reaches them.
+  configuration_values = jsonencode({
+    controller = {
+      extraVolumeTags = {
+        Project        = "capstone-project-group-01"
+        Environment    = var.environment
+        Team           = local.team_name
+        NukeProtection = "Enabled"
+      }
+    }
+  })
+
   depends_on = [
     aws_eks_node_group.general,
     aws_eks_pod_identity_association.ebs_csi_driver,

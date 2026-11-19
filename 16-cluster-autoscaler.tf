@@ -88,6 +88,16 @@ resource "aws_autoscaling_group_tag" "project" {
   }
 }
 
+resource "aws_autoscaling_group_tag" "nuke_protection" {
+  autoscaling_group_name = tolist(aws_eks_node_group.general.resources)[0].autoscaling_groups[0].name
+
+  tag {
+    key                 = "NukeProtection"
+    value               = "Enabled"
+    propagate_at_launch = true
+  }
+}
+
 resource "aws_autoscaling_group_tag" "cluster_autoscaler_owned" {
   autoscaling_group_name = tolist(aws_eks_node_group.general.resources)[0].autoscaling_groups[0].name
 

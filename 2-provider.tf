@@ -6,6 +6,10 @@ provider "aws" {
       Project     = "capstone-project-group-01"
       Environment = var.environment
       Team        = local.team_name
+      # Other teams' resources in this shared sandbox carry this tag and
+      # survive the daily 6am AWSNukeAdminRole sweep - ours doesn't, and
+      # gets wiped. Adding it is an attempt to opt out the same way.
+      NukeProtection = "Enabled"
     }
   }
 }

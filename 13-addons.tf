@@ -76,7 +76,10 @@ resource "aws_eks_addon" "ext_dns" {
 
   # Default addon config omits a CPU limit, failing Kyverno's
   # require-resource-limits policy (kyverno-require-resource-limits.yaml).
+  # Without domainFilters external-dns reads every hosted zone in this shared
+  # account; one zone it has no IAM access to aborts the whole sync.
   configuration_values = jsonencode({
+    domainFilters = ["sctp-sandbox.com"]
     resources = {
       requests = { cpu = "10m", memory = "32Mi" }
       limits   = { cpu = "100m", memory = "64Mi" }

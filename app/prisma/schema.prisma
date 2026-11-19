@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Operator {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique @db.VarChar(64)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  displayName  String   @map("display_name") @db.VarChar(128)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  acknowledgedAlarms Alarm[]
+
+  @@map("operators")
+}
+
+model MachineEvent {
+  id       BigInt   @id @default(autoincrement())
+  v        Int
+  ts       DateTime @db.DateTime(3)
+  runId    BigInt   @map("run_id")
+  machine  String   @db.VarChar(64)
+  event    String   @db.VarChar(64)
+  detail   String?  @db.Text
+  gear     String?  @db.VarChar(16)
+  conveyor String?  @db.VarChar(16)
+  output   String?  @db.VarChar(16)
+  oee      Float?
+
+  @@index([machine, ts])
+  @@index([runId])
+  @@map("machine_events")
+}
+
+model OeeSummary {
+  id              BigInt   @id @default(autoincrement())
+  v               Int
+  ts              DateTime @db.DateTime(3)
+  runId           BigInt   @map("run_id")
+  machine         String   @db.VarChar(64)
+  product         String?  @db.VarChar(64)
+  availability    Float?
+  performance     Float?
+  quality         Float?
+  oee             Float?
+  total           Int?
+  good            Int?
+  defect          Int?
+  elapsedS        Int?     @map("elapsed_s")
+  downtimeS       Int?     @map("downtime_s")
+  setupS          Int?     @map("setup_s")
+  runtimeS        Int?     @map("runtime_s")
+  plannedTimeMin  Int?     @map("planned_time_min")
+  idealCycleS     Float?   @map("ideal_cycle_s")
+
+  @@index([machine, ts])
+  @@index([runId])
+  @@map("oee_summaries")
+}
+
+enum AlarmSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+enum AlarmStatus {
+  raised
+  acknowledged
+  cleared
+}
+
+model Alarm {
+  id          BigInt        @id @default(autoincrement())
+  // Stable identifier for the rule that raised this alarm (e.g. "gear_down").
+  // Together with machine + runId it defines the dedupe key for an open alarm.
+  ruleKey     String        @map("rule_key") @db.VarChar(64)
+  severity    AlarmSeverity
+  status      AlarmStatus   @default(raised)
+  machine     String        @db.VarChar(64)
+  product     String?       @db.VarChar(64)
+  runId       BigInt?       @map("run_id")
+  title       String        @db.VarChar(255)
+  detail      String?       @db.Text
+
+  raisedAt       DateTime  @default(now()) @map("raised_at") @db.DateTime(3)
+  acknowledgedAt DateTime? @map("acknowledged_at") @db.DateTime(3)
+  clearedAt      DateTime? @map("cleared_at") @db.DateTime(3)
+
+  acknowledgedById Int?      @map("acknowledged_by_id")
+  acknowledgedBy   Operator? @relation(fields: [acknowledgedById], references: [id], onDelete: SetNull)
+
+  // Only one open (raised/acknowledged) alarm per rule+machine+run at a time;
+  // enforced in code since MySQL cannot express a partial unique index.
+  @@index([machine, ruleKey, status])
+  @@index([status, raisedAt])
+  @@map("alarms")
+}

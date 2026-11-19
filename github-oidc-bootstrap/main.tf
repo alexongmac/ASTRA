@@ -333,33 +333,63 @@ resource "aws_iam_role_policy" "s3_scoped" {
 }
 
 # ECR repo management for the image this stack's app CI pushes/pulls.
-resource "aws_iam_role_policy" "ecr_scoped" {
-  name = "ecr-stack-management"
-  role = aws_iam_role.github_oidc.name
-
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
+# A customer-managed policy rather than an inline one: a role's inline
+# policies share a 10,240-byte quota and this role is close to it, while
+# managed policies are counted separately (10 attachments, 6,144 bytes each).
+resource "aws_iam_policy" "ecr_scoped" {
+  name        = "${var.github_oidc_role_name}-ecr"
+  description = "ECR repository management and image push for the GitHub OIDC role"
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid    = "EcrRepoManage"
-      Effect = "Allow"
-      Action = [
-        "ecr:CreateRepository",
-        "ecr:DeleteRepository",
-        "ecr:DescribeRepositories",
-        "ecr:PutLifecyclePolicy",
-        "ecr:GetLifecyclePolicy",
-        "ecr:DeleteLifecyclePolicy",
-        "ecr:TagResource",
-        "ecr:UntagResource",
-        "ecr:ListTagsForResource",
-      ]
-      Resource = "arn:aws:ecr:*:*:repository/astra-*"
-    }]
+    Statement = [
+      {
+        Sid    = "EcrRepoManage"
+        Effect = "Allow"
+        Action = [
+          "ecr:CreateRepository",
+          "ecr:DeleteRepository",
+          "ecr:DescribeRepositories",
+          "ecr:PutLifecyclePolicy",
+          "ecr:GetLifecyclePolicy",
+          "ecr:DeleteLifecyclePolicy",
+          "ecr:TagResource",
+          "ecr:UntagResource",
+          "ecr:ListTagsForResource",
+        ]
+        Resource = "arn:aws:ecr:*:*:repository/astra-*"
+      },
+      {
+        # Docker login. This action is account-level and rejects any
+        # resource-level scoping, so it has to stand alone on "*".
+        Sid      = "EcrAuth"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        # Pushing the web app image built by web-app-deploy.yml, and the
+        # layer reads Docker performs to skip layers already present.
+        Sid    = "EcrImagePush"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+        ]
+        Resource = "arn:aws:ecr:*:*:repository/astra-*"
+      },
+    ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_scoped" {
+  role       = aws_iam_role.github_oidc.name
+  policy_arn = aws_iam_policy.ecr_scoped.arn
 }
 
 # RDS instance/subnet-group management for the stack's MySQL database,
@@ -488,6 +518,42 @@ resource "aws_iam_role_policy" "rds_scoped" {
   })
 }
 
+# SQS queues backing the alarm ingest path: the IoT rules deliver to the
+# main queue and the worker consumes it, with a DLQ behind a redrive policy.
+resource "aws_iam_role_policy" "sqs_scoped" {
+  name = "sqs-stack-management"
+  role = aws_iam_role.github_oidc.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "SqsQueueManage"
+        Effect = "Allow"
+        Action = [
+          # GetQueueAttributes is needed even for a plan: the provider's Read
+          # for aws_sqs_queue fetches attributes to detect drift.
+          "sqs:CreateQueue",
+          "sqs:DeleteQueue",
+          "sqs:GetQueueAttributes",
+          "sqs:SetQueueAttributes",
+          "sqs:GetQueueUrl",
+          "sqs:ListQueueTags",
+          "sqs:TagQueue",
+          "sqs:UntagQueue",
+        ]
+        Resource = "arn:aws:sqs:*:*:astra-*"
+      },
+      {
+        Sid      = "SqsListQueues"
+        Effect   = "Allow"
+        Action   = ["sqs:ListQueues"]
+        Resource = "*"
+      },
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "iot_scoped" {
   name = "iot-stack-management"
   role = aws_iam_role.github_oidc.name
@@ -596,47 +662,76 @@ resource "aws_iam_role_policy" "iot_scoped" {
   })
 }
 
-# Lambda function/layer management for the OEE ingest pipeline, plus the
-# resource-policy permission the IoT Rule needs to invoke the function.
-resource "aws_iam_role_policy" "lambda_scoped" {
-  name = "lambda-stack-management"
+# WAF web ACL and ACM certificate (with its Route53 DNS validation record)
+# for the web app's ALB.
+resource "aws_iam_role_policy" "web_app_edge_scoped" {
+  name = "web-app-edge-management"
   role = aws_iam_role.github_oidc.name
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "LambdaFunctionManage"
+        Sid    = "WafWebAclManage"
         Effect = "Allow"
         Action = [
-          # Get*/List* granted broadly (still scoped to astra-* function
-          # names below) because the provider's Read for aws_lambda_function
-          # probes several related sub-resources (code signing config, event
-          # invoke config, concurrency, policy, versions, tags) and drip-feeding
-          # one missing action per CI run isn't worth the round-trips.
-          "lambda:Get*",
-          "lambda:List*",
-          "lambda:CreateFunction",
-          "lambda:DeleteFunction",
-          "lambda:UpdateFunctionCode",
-          "lambda:UpdateFunctionConfiguration",
-          "lambda:TagResource",
-          "lambda:UntagResource",
-          "lambda:AddPermission",
-          "lambda:RemovePermission",
+          "wafv2:CreateWebACL",
+          "wafv2:UpdateWebACL",
+          "wafv2:DeleteWebACL",
+          "wafv2:GetWebACL",
+          "wafv2:ListTagsForResource",
+          "wafv2:TagResource",
+          "wafv2:UntagResource",
         ]
-        Resource = "arn:aws:lambda:*:*:function:astra-*"
+        # CreateWebACL/UpdateWebACL are also authorized against every
+        # managed rule group the ACL references.
+        Resource = [
+          "arn:aws:wafv2:*:*:regional/webacl/astra-*/*",
+          "arn:aws:wafv2:*:*:regional/managedruleset/*/*",
+        ]
       },
       {
-        Sid    = "LambdaLayerManage"
+        Sid      = "WafList"
+        Effect   = "Allow"
+        Action   = ["wafv2:ListWebACLs"]
+        Resource = "*"
+      },
+      {
+        # Certificate ARNs are random IDs, so these can't be name-scoped.
+        Sid    = "AcmCertificateManage"
         Effect = "Allow"
         Action = [
-          "lambda:PublishLayerVersion",
-          "lambda:DeleteLayerVersion",
-          "lambda:Get*",
-          "lambda:List*",
+          "acm:RequestCertificate",
+          "acm:DescribeCertificate",
+          "acm:GetCertificate",
+          "acm:ListCertificates",
+          "acm:ListTagsForCertificate",
+          "acm:AddTagsToCertificate",
+          "acm:RemoveTagsFromCertificate",
+          "acm:DeleteCertificate",
         ]
-        Resource = "arn:aws:lambda:*:*:layer:astra-*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Route53ValidationRecords"
+        Effect = "Allow"
+        Action = [
+          "route53:GetHostedZone",
+          "route53:ListResourceRecordSets",
+          "route53:ChangeResourceRecordSets",
+          "route53:ListTagsForResource",
+        ]
+        Resource = "arn:aws:route53:::hostedzone/Z00541411T1NGPV97B5C0"
+      },
+      {
+        Sid    = "Route53Lookup"
+        Effect = "Allow"
+        Action = [
+          "route53:ListHostedZones",
+          "route53:ListHostedZonesByName",
+          "route53:GetChange",
+        ]
+        Resource = "*"
       },
     ]
   })

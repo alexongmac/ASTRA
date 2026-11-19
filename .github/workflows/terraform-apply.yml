@@ -45,13 +45,6 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # lambda/*.zip is gitignored (build artifacts, not source) - build them
-      # here so terraform validate/plan can resolve filebase64sha256() on them.
-      # build.py produces a byte-identical zip for identical source, so this
-      # doesn't force a new Lambda/layer version on every CI run.
-      - name: Build Lambda artifacts
-        run: python3 lambda/build.py
-
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
@@ -92,30 +85,8 @@ jobs:
       - name: Install Snyk CLI
         uses: snyk/actions/setup@master
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Python dependencies
-        run: pip install -r lambda/requirements.txt
-
       - name: Run Snyk to check for vulnerabilities in Terraform project
         run: snyk iac test --severity-threshold=high
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Run Snyk to check for vulnerabilities in Python dependencies
-        uses: snyk/actions/python-3.10@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high --file=lambda/requirements.txt
-
-      - name: Run Snyk Code test on Python source
-        run: snyk code test --severity-threshold=high lambda/
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -150,9 +121,6 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-
-      - name: Build Lambda artifacts
-        run: python3 lambda/build.py
 
       - name: Terraform Init
         run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"

@@ -36,5 +36,3 @@ output "iot_private_key" {
   sensitive = true
 }
 
-
-

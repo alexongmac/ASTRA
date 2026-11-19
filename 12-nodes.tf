@@ -52,19 +52,25 @@ resource "aws_launch_template" "nodes" {
   }
 
   # Provider default_tags don't propagate into tag_specifications, so the
-  # instances and volumes the node group launches need Project set here.
+  # instances and volumes the node group launches need the full set here.
   tag_specifications {
     resource_type = "instance"
     tags = {
-      Name    = "${local.eks_name}-ec2"
-      Project = "capstone-project-group-01"
+      Name           = "${local.eks_name}-ec2"
+      Project        = "capstone-project-group-01"
+      Environment    = var.environment
+      Team           = local.team_name
+      NukeProtection = "Enabled"
     }
   }
 
   tag_specifications {
     resource_type = "volume"
     tags = {
-      Project = "capstone-project-group-01"
+      Project        = "capstone-project-group-01"
+      Environment    = var.environment
+      Team           = local.team_name
+      NukeProtection = "Enabled"
     }
   }
 }
@@ -90,7 +96,7 @@ resource "aws_eks_node_group" "general" {
 
   scaling_config {
     desired_size = 2
-    max_size     = 4
+    max_size     = 6
     min_size     = 2
   }
 

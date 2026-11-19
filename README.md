@@ -1,47 +1,82 @@
-### Notes
+# ASTRA — operator notes
 
-### one-time setup, after provider.tf changes
+Working commands for the development and production clusters. Run everything
+from the repo root unless a section says otherwise.
 
-- terraform init -reconfigure
+### One-time setup, after provider.tf changes
 
-### day to day
+terraform init -reconfigure
 
-- terraform init -reconfigure -backend-config=key=astra/development.tfstate
-- terraform init -reconfigure -backend-config=key=astra/production.tfstate
+### Day to day
 
--reconfigure matters when switching between environments: without it,
+terraform init -reconfigure -backend-config=key=astra/development.tfstate
+terraform init -reconfigure -backend-config=key=astra/production.tfstate
+
+reconfigure matters when switching between environments: without it,
 Terraform offers to copy the current state into the new key, and answering
 "yes" would overwrite prod's state with dev's (or vice versa).
 
-- terraform apply -auto-approve -var-file=envs/development.tfvars
-- terraform apply -auto-approve -var-file=envs/production.tfvars
+terraform plan -var-file=envs/development.tfvars
+
+terraform apply --auto-approve -var-file=envs/development.tfvars
+terraform apply --auto-approve -var-file=envs/production.tfvars
 
 Review the plan before typing "yes" - especially any destroy or
 "must be replaced" lines.
 
-### State files will land at s3 bucket `sctp-tfstate-ce13`:
+### State files in the S3 bucket `sctp-tfstate-ce13`
 
 - astra/development.tfstate
 - astra/production.tfstate
 
-### Terraform Destroy
+### Terraform destroy
 
-please take note of the git branch must be in "develop"
+Check you are on the `develop` branch first.
 
-terraform destroy -auto-approve -var-file="envs/development.tfvars"
+terraform destroy --auto-approve -var-file="envs/development.tfvars"
 
-terraform destroy -auto-approve -var-file="envs/production.tfvars"
+terraform destroy --auto-approve -var-file="envs/production.tfvars"
 
-### Kyverno policy:
+### Recovering from the daily 6am sweep
+
+The sweep deletes AWS resources, not the state file. State still records them as
+existing while AWS no longer has them, which is ordinary drift: `terraform plan`
+refreshes against reality and proposes recreating what is missing. No state
+import is needed — a plan showing only additions and no destroys confirms that.
+
+terraform plan -var-file=envs/development.tfvars
+
+terraform apply -var-file=envs/development.tfvars -auto-approve
+
+It mainly takes untaggable resources: IAM inline policies, role-policy
+attachments and IoT topic rules. Afterwards the worker still holds stale
+credentials and keeps failing with "169.254.170.23 is not a valid container
+metadata service hostname", so restart it:
+
+kubectl rollout restart deployment/astra-web-app-worker -n web-app
+
+### Fetching the IoT certificates
+
+Run from the ASTRA directory.
+
+terraform output -raw iot_certificate_pem > certs/nodered-bridge.crt
+terraform output -raw iot_private_key > certs/nodered-bridge.key
+terraform output -raw iot_endpoint > certs/iot-endpoint.txt
+curl -s https://www.amazontrust.com/repository/AmazonRootCA1.pem > certs/AmazonRootCA1.pem
+
+chmod 600 certs/nodered-bridge.key
+ls -l certs/
+
+### Kyverno policy reports
 
 kubectl get polr -A
 kubectl get polr -A --no-headers | awk '{fail[$1]+=$6; total[$1]++} END {for (ns in fail) print ns, "fail="fail[ns], "resources="total[ns]}' | sort -k2 -t= -rn
 
-### Get Grafana 'admin' user password by running:
+### Grafana admin password
 
 kubectl --namespace monitoring get secrets kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
 
-### CloudWatch for audit logging who did what, when, via the K8s API
+### CloudWatch audit logs — who did what, when, via the K8s API
 
 1. Go to CloudWatch -> Log groups
 
@@ -51,7 +86,7 @@ kubectl --namespace monitoring get secrets kube-prometheus-stack-grafana -o json
 
 4. Click a stream to view entries, or use Logs Insights to run queries across all streams in the group
 
-### via AWS CLI
+### Audit logs via the AWS CLI
 
 aws logs describe-log-streams \
  --log-group-name /aws/eks/astra-eks-development-cluster/cluster \
@@ -70,7 +105,7 @@ Then fetch results with
 
 aws logs get-query-results --query-id <id>.
 
-### some of the aws eks command:
+### Common aws eks commands
 
 - aws eks update-kubeconfig --region us-east-1 --name astra-eks-development-cluster --profile <aws_username>
 
@@ -82,28 +117,28 @@ aws logs get-query-results --query-id <id>.
 
 - kubectl get pods -n <namespace> -l app.kubernetes.io/name=<app name>
 
-### Check ArgoCD is installed
+### Check ArgoCD is running
 
 kubectl get pods,svc,secrets -n argocd
 
-### to get the secrets
+### Get the ArgoCD admin secret
 
 kubectl get secret -n argocd
 
 kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 --decode
 
-### Use this command to access ArgoCD UI on your local machine on port 8080
+### Access the ArgoCD UI locally on port 8080
 
 kubectl get svc -n argocd
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 open browser type: localhost:8080/
 
-### Enter argoCD Username and password
+### ArgoCD login
 
 Username: admin
 password : xxxxxxxxxxx
 
-### To access the RDS via EKS internal subnet
+### Access RDS from inside the cluster
 
 kubectl apply -f rds-access.yaml
 kubectl wait --for=condition=Ready pod/rds-access --timeout=60s
@@ -113,9 +148,9 @@ kubectl exec -it rds-access -- mysql \
 
 enter the password from Secrets Manager
 
-### access the RDS by port forwarding
+### Access RDS by port forwarding
 
-create a relay pod...
+Creates a relay pod in the cluster and forwards a local port through it.
 
 kubectl apply -f rds-proxy.yaml
 kubectl wait --for=condition=Ready pod/rds-proxy --timeout=60s
@@ -123,12 +158,37 @@ kubectl port-forward pod/rds-proxy 3306:3306
 
 Connect via Workbench to 127.0.0.1:3306, user dbadmin, schema astradb, password from Secrets Manager.
 
-### when done, clean up
+### Access RDS through an SSM tunnel
+
+No relay pod needed — this forwards through a node's SSM agent instead, so it
+works even when the cluster is unhealthy. This is what the local web app and
+worker use, on port 13306 to avoid clashing with a local MySQL on 3306.
+
+Pick any node that is online. The IDs change whenever nodes are replaced, so
+look them up rather than reusing an old one:
+
+aws ssm describe-instance-information --query "InstanceInformationList[?PingStatus=='Online'].InstanceId" --output text
+
+Then open the tunnel, leaving it running in its own terminal:
+
+aws ssm start-session --target <instance-id> \
+ --document-name AWS-StartPortForwardingSessionToRemoteHost \
+ --parameters '{"host":["astra-mysql-db.chheppac9ozc.us-east-1.rds.amazonaws.com"],"portNumber":["3306"],"localPortNumber":["13306"]}'
+
+Connect Workbench to 127.0.0.1:13306, user dbadmin, schema astradb, password
+from Secrets Manager. The app reads the same tunnel through DATABASE_URL in
+app/.env.local.
+
+Check it is up with:
+
+nc -z 127.0.0.1 13306 && echo "tunnel up"
+
+### Clean up the relay pods
 
 kubectl delete -f rds-access.yaml
 kubectl delete -f rds-proxy.yaml
 
-### To dump SQL database
+### Dump the SQL database
 
 kubectl exec rds-access -- mysqldump \
  -h astra-mysql-db.chheppac9ozc.us-east-1.rds.amazonaws.com \
@@ -137,7 +197,7 @@ kubectl exec rds-access -- mysqldump \
  --column-statistics=0 \
  --databases astradb > astradb_dump.sql
 
-### To get database table to csv
+### Export a database table to CSV
 
 kubectl exec rds-access -- mysql \
  -h astra-mysql-db.chheppac9ozc.us-east-1.rds.amazonaws.com \
@@ -145,17 +205,20 @@ kubectl exec rds-access -- mysql \
  -e "SELECT \* FROM machine_events" \
  --batch --raw | tr '\t' ',' > machine_events.csv
 
-### Check Trivy operator pod status
+### Check the Trivy operator
 
 kubectl get pods -n trivy-system
 
 kubectl get vulnerabilityreports -A -o wide
 
-### Running and healthy. It automatically scans workloads as they're created/updated — no manual trigger needed for that. To see its actual scan results right now:
+### Trivy scan results
+
+Trivy scans workloads automatically as they are created or updated; no manual
+trigger is needed. To see current results:
 
 kubectl get vulnerabilityreports -A -o wide
 
-### here's an example how you get report from kyverno
+### Example: reading a Kyverno report
 
 kubectl get polr -A
 
@@ -165,7 +228,11 @@ kubectl describe polr <uid> -n kube-system
 
 kubectl describe polr 6d200205-b172-46c8-b8e9-1c92f228ff70 -n kube-system
 
-### to start argocd, we need to follow:
+### Install ArgoCD
+
+Run from the repo root. The `-upgrade` and `-reconfigure` flags are only needed
+on a first run or after the backend changes; a normal `terraform init` is enough
+otherwise.
 
 terraform init -upgrade -backend-config="key=astra/development.tfstate" -reconfigure
 
@@ -173,13 +240,16 @@ terraform plan -var-file="envs/development.tfvars" -target="helm_release.argocd"
 
 terraform apply -var-file="envs/development.tfvars" -target="helm_release.argocd"
 
-### once ArgoCD itself is running, bootstrap the astra AppProject, Traefik, and the root Application
+### Bootstrap the astra AppProject, Traefik and the root Application
 
-these come from ASTRA_argocd's bootstrap/ folder and are applied directly via
-kubectl, not Terraform - kubectl_manifest's plan-time validation rejects a
-manifest if any CRD it references doesn't exist yet (e.g. a ClusterPolicy
-before Kyverno has synced), which blocked `terraform plan` entirely. Use
-the branch matching the cluster: `develop` for development, `main` for production.
+Once ArgoCD itself is running, apply these three manifests from the
+ASTRA_argocd repo's `bootstrap/` folder. Use the branch matching the cluster:
+`develop` for development, `main` for production.
+
+They are applied with kubectl rather than Terraform because the
+`kubectl_manifest` resource validates at plan time and rejects a manifest whose
+CRDs do not exist yet — for example a ClusterPolicy before Kyverno has synced —
+which blocked `terraform plan` entirely.
 
 ### Option A: one file (development only)
 
@@ -213,15 +283,25 @@ then the root app-of-apps that syncs everything in Applications/:
 
 kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/root-app.yaml
 
-### IMPORTANT: root-app.yaml ships with targetRevision: main. On the development cluster, change it to develop or the app-of-apps tracks the wrong branch:
+### Point root-app at the right branch
+
+**Important:** `root-app.yaml` ships with `targetRevision: main`. On the
+development cluster it must be changed to `develop`, or the app-of-apps tracks
+the wrong branch.
 
 kubectl patch application astra-root -n argocd --type merge -p '{"spec":{"source":{"targetRevision":"develop"}}}'
 
-### once applied, ArgoCD takes over syncing everything in ASTRA_argocd's Applications/ folder automatically
+### Confirm ArgoCD has taken over
+
+From here ArgoCD syncs everything in ASTRA_argocd's `Applications/` folder
+automatically.
 
 kubectl get applications -n argocd
 
-### update argocd via kubectl, you have two options without pushing to git:
+### Update an Application without pushing to git
+
+Disable self-heal first, apply the change, then trigger a sync. Re-enable
+self-heal afterwards, or ArgoCD will revert the change on its next pass.
 
 kubectl patch application <applications> -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":false}}}}'
 kubectl apply -f <manifest file>.yaml

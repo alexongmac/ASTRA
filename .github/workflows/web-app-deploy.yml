@@ -1,0 +1,166 @@
+name: Web App Build and Deploy
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - "app/**"
+      - ".github/workflows/web-app-deploy.yml"
+
+permissions:
+  id-token: write # Required for OIDC (ECR push)
+  contents: read
+
+env:
+  ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+  ECR_REPOSITORY: astra-eks-${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}-app
+
+jobs:
+  # Dependency, source and container scanning for the Next.js app. These are
+  # continue-on-error like the Terraform workflow's scans: they report findings
+  # without blocking a class-project deploy.
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      # npm ci needs the lockfile's exact tree; Snyk reads node_modules to
+      # resolve transitive dependencies rather than guessing from the manifest.
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
+
+      - name: Snyk dependency scan
+        working-directory: app
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --severity-threshold=high --all-projects
+
+      - name: Snyk Code scan
+        working-directory: app
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk code test --severity-threshold=high
+
+  build-and-push:
+    needs: security-scan
+    # arm64 runner because the EKS nodes are Graviton: an image built on an
+    # x86 runner is rejected with "no match for platform in manifest".
+    # Building natively here rather than cross-building under QEMU, which
+    # took over 20 minutes for the same image.
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+
+    # Same per-environment lock pattern as terraform-apply.yml - a develop
+    # push and a main push must never race each other's image tag. The branch
+    # expression is repeated here rather than reusing env.ENVIRONMENT: the env
+    # context is not available when concurrency is evaluated.
+    concurrency:
+      group: web-app-${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # snyk/actions/setup installs the x86 binary, which cannot run on this
+      # arm64 runner ("Exec format error"), so fetch the arm64 build directly.
+      - name: Install Snyk CLI (arm64)
+        run: |
+          curl -fsSL -o /usr/local/bin/snyk \
+            https://downloads.snyk.io/cli/stable/snyk-linux-arm64
+          chmod +x /usr/local/bin/snyk
+          snyk --version
+
+      - name: Build image
+        id: image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          docker build -t "$IMAGE" app/
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      # Scans the base image's OS packages, which the npm dependency scan in
+      # security-scan does not cover. Runs before the push so findings are
+      # attached to the build rather than discovered after it ships.
+      - name: Snyk container scan
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk container test "${{ steps.image.outputs.image }}" \
+            --file=app/Dockerfile --severity-threshold=high
+
+      - name: Push image
+        run: docker push "${{ steps.image.outputs.image }}"
+
+  update-manifest:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    # Mirrors terraform-apply.yml's production approval gate - a main push
+    # pauses here until someone approves, so the image is never deployed to
+    # production without a human looking at it first.
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+
+    steps:
+      # GITHUB_TOKEN is scoped to this repo only, so writing to
+      # ASTRA_argocd needs a separate PAT with contents:write on that repo.
+      # ref matters: checkout defaults to the GitOps repo's default branch
+      # (main), but each ArgoCD Application tracks the branch matching its
+      # environment, so the image tag has to be committed there.
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: alexongmac/ASTRA_argocd
+          ref: ${{ github.ref == 'refs/heads/main' && 'main' || 'develop' }}
+          token: ${{ secrets.GITOPS_REPO_TOKEN }}
+
+      - name: Install yq
+        uses: mikefarah/yq@v4.54.3
+        with:
+          cmd: yq --version
+
+      - name: Update image tag
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
+        run: |
+          # web-app/ is raw manifests, not a Helm chart (it's our own image,
+          # not a published chart), so this edits the Deployments directly
+          # instead of a valuesObject.image field. The file holds both the web
+          # and worker Deployments, which share one image, so this selects
+          # every document rather than only the first.
+          yq -i "select(.kind == \"Deployment\").spec.template.spec.containers[].image = \"${IMAGE}\"" web-app/deployment.yaml
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web-app/deployment.yaml
+          git commit -m "Deploy web-app ${{ github.sha }} to ${{ env.ENVIRONMENT }}" || exit 0
+          git push
