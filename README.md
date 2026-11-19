@@ -13,13 +13,13 @@ run this command when you're in branch develop. but the backend must be switched
 
 git checkout develop
 terraform init -reconfigure -backend-config=key=astra/development.tfstate
-grep '"key"' .terraform/terraform.tfsate (must print development)
+grep '"key"' .terraform/terraform.tfstate (must print development)
 
 ensure PR is performed and merged, then switch to main, to run this command, the the backend must be switched first.
 
 git checkout main
 terraform init -reconfigure -backend-config=key=astra/production.tfstate
-grep '"key"' .terraform/terraform.tfsate (must print production)
+grep '"key"' .terraform/terraform.tfstate (must print production)
 
 reconfigure matters when switching between environments: without it,
 Terraform offers to copy the current state into the new key, and answering
@@ -174,7 +174,7 @@ kubectl port-forward pod/rds-proxy 3306:3306
 
 Connect via Workbench to 127.0.0.1:3306, user dbadmin, schema astradb, password from Secrets Manager.
 
-### Access RDS through an SSM tunnel
+### Access RDS through an SSM tunnel for eks-development
 
 No relay pod needed — this forwards through a node's SSM agent instead, so it
 works even when the cluster is unhealthy. This is what the local web app and
@@ -198,6 +198,22 @@ app/.env.local.
 Check it is up with:
 
 nc -z 127.0.0.1 13306 && echo "tunnel up"
+
+### Access RDS through an SSM tunnel for eks-production
+
+# Terminal 1 — tunnel to production RDS via a production node
+
+aws ssm describe-instance-information --query "InstanceInformationList[?PingStatus=='Online'].InstanceId" --output text
+
+aws ssm start-session --target <a-production-node-id> \
+ --document-name AWS-StartPortForwardingSessionToRemoteHost \
+ --parameters '{"host":["astra-mysql-db-production.chheppac9ozc.us-east-1.rds.amazonaws.com"],"portNumber":["3306"],"localPortNumber":["13307"]}'
+
+# Terminal 2
+
+cd /Users/alex/Desktop/ClassActivity/ASTRA/app
+DATABASE_URL="mysql://dbadmin:<password-from-secrets-manager>@127.0.0.1:13307/astradb" npx prisma migrate deploy
+DATABASE_URL="..." SEED_OPERATOR_USERNAME=alex SEED_OPERATOR_PASSWORD='your-choice' SEED_OPERATOR_NAME=alex npm run seed
 
 ### Clean up the relay pods
 
