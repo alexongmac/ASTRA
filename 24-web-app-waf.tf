@@ -1,6 +1,7 @@
 locals {
-  # development stays unsuffixed, matching the other astra-* hostnames.
-  web_app_hostname = var.environment == "development" ? "astra-app.sctp-sandbox.com" : "astra-app-${var.environment}.sctp-sandbox.com"
+  # development stays unsuffixed, matching the other astra-* hostnames;
+  # production takes the -prod suffix the monitoring hostnames use.
+  web_app_hostname = var.environment == "development" ? "astra-app.sctp-sandbox.com" : "astra-app-prod.sctp-sandbox.com"
 
   web_app_waf_managed_rules = {
     AWSManagedRulesCommonRuleSet          = 10

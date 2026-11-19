@@ -7,21 +7,31 @@ from the repo root unless a section says otherwise.
 
 terraform init -reconfigure
 
-### Day to day
+### Day to day Ensure your are in the correct branch
 
+run this command when you're in branch develop. but the backend must be switched first
+
+git checkout develop
 terraform init -reconfigure -backend-config=key=astra/development.tfstate
+grep '"key"' .terraform/terraform.tfsate (must print development)
+
+ensure PR is performed and merged, then switch to main, to run this command, the the backend must be switched first.
+
+git checkout main
 terraform init -reconfigure -backend-config=key=astra/production.tfstate
+grep '"key"' .terraform/terraform.tfsate (must print production)
 
 reconfigure matters when switching between environments: without it,
 Terraform offers to copy the current state into the new key, and answering
 "yes" would overwrite prod's state with dev's (or vice versa).
 
 terraform plan -var-file=envs/development.tfvars
+terraform plan -var-file=envs/production.tfvars
 
 terraform apply --auto-approve -var-file=envs/development.tfvars
 terraform apply --auto-approve -var-file=envs/production.tfvars
 
-Review the plan before typing "yes" - especially any destroy or
+Review the plan/apply before typing "yes" - especially any destroy or
 "must be replaced" lines.
 
 ### State files in the S3 bucket `sctp-tfstate-ce13`
@@ -54,6 +64,12 @@ credentials and keeps failing with "169.254.170.23 is not a valid container
 metadata service hostname", so restart it:
 
 kubectl rollout restart deployment/astra-web-app-worker -n web-app
+
+### to restart when the pods is down, example
+
+aws eks update-kubeconfig --region us-east-1 --name astra-eks-<env-cluster> --profile alexongmac
+kubectl rollout restart deployment -n external-dns
+kubectl rollout restart deployment -n cert-manager
 
 ### Fetching the IoT certificates
 
