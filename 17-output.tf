@@ -36,5 +36,7 @@ output "iot_private_key" {
   sensitive = true
 }
 
-
+output "ecr_repository_url" {
+  value = aws_ecr_repository.app.repository_url
+}
 
