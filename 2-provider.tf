@@ -14,27 +14,29 @@ provider "aws" {
   }
 }
 
-provider "kubernetes" {
-  host                   = aws_eks_cluster.eks.endpoint
-  cluster_ca_certificate = base64decode(aws_eks_cluster.eks.certificate_authority[0].data)
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.eks.name, "--region", local.region]
-  }
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = aws_eks_cluster.eks.endpoint
-    cluster_ca_certificate = base64decode(aws_eks_cluster.eks.certificate_authority[0].data)
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.eks.name, "--region", local.region]
-    }
-  }
-}
+# No kubernetes or helm provider here, deliberately.
+#
+# Terraform manages AWS only. Everything inside the cluster - ArgoCD itself,
+# the astra AppProject, the root Applications, and every workload - is applied
+# with kubectl from the ASTRA_argocd repo. See that repo's
+# bootstrap/argocd-install/ for ArgoCD, and this repo's README for the order.
+#
+# Both providers authenticate by running `aws eks get-token` against the
+# cluster endpoint, and Terraform evaluates provider config at PLAN time. That
+# made `terraform plan` require a reachable, healthy cluster - precisely what
+# you do not have when something is broken. A cert-manager CA rotation once
+# failed the apply with an x509 webhook error, and the production node-group
+# outage blocked it too. ArgoCD was the only consumer, so removing it removed
+# the dependency: plan is now pure AWS API.
+#
+# The same plan-time evaluation is why the bootstrap manifests were never
+# managed here either: the kubectl provider validates at plan time and rejects
+# a manifest whose CRDs do not exist yet - a ClusterPolicy before Kyverno has
+# synced, for example - which blocked `terraform plan` entirely. A manual
+# `kubectl apply` does not pre-validate that way.
+#
+# If you add a resource that needs cluster access, prefer a kubectl step in
+# the README or a new ArgoCD Application over reinstating these providers.
 
 terraform {
   required_providers {
@@ -45,14 +47,6 @@ terraform {
     time = {
       source  = "hashicorp/time"
       version = "~> 0.13"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.35"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.17"
     }
   }
 
