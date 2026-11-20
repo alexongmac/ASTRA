@@ -77,10 +77,22 @@ jobs:
             helm uninstall "$name" -n "$namespace" || true
           done
 
+      # Pinned to v3.6.2, the version 23-argocd.tf's helm_release actually
+      # installs (chart 10.18.2 -> app v3.6.2). This used to reference
+      # .../argo-cd/stable/manifests/install.yaml - a floating ref that
+      # resolves to whatever upstream's latest release is, so it listed
+      # resources that may not match what is installed and silently left the
+      # rest behind. Deleting the namespace below is what actually clears
+      # them, but a mismatched delete masks failures and makes this step
+      # useless as a signal.
+      #
+      # If the kustomize migration in the README is ever completed, replace
+      # this with the pinned bootstrap directory instead:
+      #   kubectl delete -k ../ASTRA_argocd/bootstrap/argocd-install/ || true
       - name: Uninstall ArgoCD (best-effort)
         continue-on-error: true
         run: |
-          kubectl delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || true
+          kubectl delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.6.2/manifests/install.yaml || true
           kubectl delete namespace argocd || true
 
       - name: Terraform Init
