@@ -58,11 +58,11 @@ jobs:
 
   build-and-push:
     needs: security-scan
-    # arm64 runner because the EKS nodes are Graviton: an image built on an
-    # x86 runner is rejected with "no match for platform in manifest".
-    # Building natively here rather than cross-building under QEMU, which
-    # took over 20 minutes for the same image.
-    runs-on: ubuntu-24.04-arm
+    # x86 runner to match the t3.medium (AL2023_x86_64_STANDARD) nodes. This
+    # must stay in step with ami_type/instance_type in 12-nodes.tf: an image
+    # built for the wrong architecture is rejected at pod start with "no match
+    # for platform in manifest".
+    runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.image.outputs.image }}
 
@@ -88,14 +88,10 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      # snyk/actions/setup installs the x86 binary, which cannot run on this
-      # arm64 runner ("Exec format error"), so fetch the arm64 build directly.
-      - name: Install Snyk CLI (arm64)
-        run: |
-          curl -fsSL -o /usr/local/bin/snyk \
-            https://downloads.snyk.io/cli/stable/snyk-linux-arm64
-          chmod +x /usr/local/bin/snyk
-          snyk --version
+      # Back on an x86 runner, so the standard action's binary runs natively
+      # and the manual arm64 download is no longer needed.
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
 
       - name: Build image
         id: image

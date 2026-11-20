@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { AuthError } from "next-auth";
 import { auth, signIn } from "@/auth";
+import { BrandGear, LowPolyBackground } from "./low-poly-background";
+import { PasswordField } from "./password-field";
+import "./login.css";
 
 // Reads the session to redirect signed-in operators, so it blocks on the server.
 export const instant = false;
@@ -31,48 +34,46 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="min-h-screen bg-slate-900 px-4 py-6">
-      <h1 className="text-sm font-semibold text-slate-100">R2D2 · Alarm Acknowledgement</h1>
+    <main className="login-page">
+      <LowPolyBackground />
 
-      <div className="mx-auto mt-24 w-full max-w-sm rounded-lg border border-slate-700 bg-slate-800 p-6 shadow-sm">
-        <form action={login} className="space-y-4">
-          <div>
-            <label htmlFor="username" className="block text-sm text-slate-300">
-              Operator name
-            </label>
+      <section className="login-card">
+        <form action={login}>
+          <div className="brand">
+            <BrandGear />
+            <span>R2D2 Operator</span>
+          </div>
+
+          <h2>Welcome back</h2>
+          <p className="sub">Log in to see Operation Excellence.</p>
+
+          <label htmlFor="username">Operator name</label>
+          <div className="inp-ic">
+            <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+            </svg>
             <input
               id="username"
               name="username"
-              required
               autoComplete="username"
-              className="mt-1 w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm text-slate-300">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
               required
-              autoComplete="current-password"
-              className="mt-1 w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+              maxLength={64}
             />
           </div>
 
-          {error ? <p className="text-sm text-red-400">Invalid operator name or password.</p> : null}
+          <label htmlFor="password">Password</label>
+          <PasswordField />
 
-          <button
-            type="submit"
-            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
+          <p className="login-error" role="alert">
+            {error ? "Invalid operator name or password." : ""}
+          </p>
+
+          <button type="submit" className="login-submit">
             Log in
           </button>
         </form>
-      </div>
+      </section>
     </main>
   );
 }

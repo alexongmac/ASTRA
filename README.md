@@ -13,13 +13,13 @@ run this command when you're in branch develop. but the backend must be switched
 
 git checkout develop
 terraform init -reconfigure -backend-config=key=astra/development.tfstate
-grep '"key"' .terraform/terraform.tfsate (must print development)
+grep '"key"' .terraform/terraform.tfstate (must print development)
 
 ensure PR is performed and merged, then switch to main, to run this command, the the backend must be switched first.
 
 git checkout main
 terraform init -reconfigure -backend-config=key=astra/production.tfstate
-grep '"key"' .terraform/terraform.tfsate (must print production)
+grep '"key"' .terraform/terraform.tfstate (must print production)
 
 reconfigure matters when switching between environments: without it,
 Terraform offers to copy the current state into the new key, and answering
@@ -64,6 +64,87 @@ credentials and keeps failing with "169.254.170.23 is not a valid container
 metadata service hostname", so restart it:
 
 kubectl rollout restart deployment/astra-web-app-worker -n web-app
+
+### When the node group is DEGRADED after a sweep (Ec2LaunchTemplateNotFound)
+
+This one does NOT show up as drift, so the plan/apply above will not fix it.
+
+Symptoms:
+
+- EKS console shows the node group Degraded, with health issue
+  `Ec2LaunchTemplateNotFound: The Amazon EC2 Launch Template lt-xxxx version 1 was not found`
+- cluster-autoscaler is in CrashLoopBackOff with a high restart count
+- `terraform plan` says "No changes"
+- Running nodes and pods are FINE — what is lost is the ability to launch new
+  ones, so a node that dies is not replaced and scaling stops
+
+Why. There are two launch templates per node group. `aws_launch_template.nodes`
+in 12-nodes.tf is ours and is tagged NukeProtection, so it survives. EKS copies
+it into an internal `eks-<uuid>` template that the ASG actually references, and
+that copy carries none of our tags, so the sweep deletes it. Terraform never
+sees a problem because the template it owns is still there.
+
+Confirm which template the ASG is pointing at and whether it still exists:
+
+aws eks describe-nodegroup --cluster-name astra-eks-development-cluster \
+ --nodegroup-name astra-eks-development-nodes \
+ --query 'nodegroup.{status:status,health:health}' --region us-east-1
+
+Do NOT bother bumping the launch template version to fix this. Publishing a new
+version is the normal way to make EKS regenerate its copy, but
+UpdateNodegroupVersion refuses while the node group is already DEGRADED:
+
+    InvalidRequestException: Nodegroup health has issues other than
+    [ AsgInstanceLaunchFailures, InstanceLimitExceeded,
+      InsufficientFreeAddresses, ClusterUnreachable,
+      Ec2LaunchTemplateVersionMismatch ]
+
+`Ec2LaunchTemplateNotFound` is not on that allowlist, so EKS blocks the very
+operation that would repair it. Both a local apply and the CI run fail here.
+
+The fix is to recreate the node group. Verify the backend FIRST — this destroys
+nodes, and getting the wrong environment here is unrecoverable:
+
+grep '"key"' .terraform/terraform.tfstate (must print the environment you intend)
+
+terraform taint aws_eks_node_group.general
+
+terraform plan -var-file=envs/development.tfvars
+
+Expect "5 to add, 0 to change, 5 to destroy": the node group plus its four
+aws_autoscaling_group_tag resources, which move because the ASG name changes.
+If the plan proposes anything else, stop and read it.
+
+terraform apply -var-file=envs/development.tfvars
+
+Note this is NOT a rolling replacement. aws_eks_node_group has no
+create_before_destroy, so the old node group goes away before the new one
+exists and there is a window of several minutes with zero nodes. The
+`max_unavailable = 1` setting only applies to in-place version updates. Expect
+the site to return errors during it; budget 10-20 minutes.
+
+Afterwards the pods from the destroyed nodes may sit in Error/Completed with the
+deployments showing 0/2. Clear them so they reschedule:
+
+kubectl delete pods -n web-app --all
+
+Then confirm recovery — status ACTIVE with an empty issues list, and the
+autoscaler Running rather than CrashLoopBackOff:
+
+aws eks describe-nodegroup --cluster-name astra-eks-development-cluster \
+ --nodegroup-name astra-eks-development-nodes \
+ --query 'nodegroup.{status:status,issues:health.issues}' --region us-east-1
+
+kubectl get pods -n kube-system | grep autoscaler
+
+kubectl get deploy -n web-app
+
+This recurs. The sweep will delete the regenerated copy the next morning, so
+treat the above as a routine ~15 minute procedure rather than a one-off repair,
+and run it on the day it matters rather than the night before. Karpenter would
+avoid the failure mode entirely, since it manages instances directly instead of
+through an ASG, but it needs its own controller node group and is a migration in
+its own right.
 
 ### to restart when the pods is down, example
 
@@ -174,7 +255,7 @@ kubectl port-forward pod/rds-proxy 3306:3306
 
 Connect via Workbench to 127.0.0.1:3306, user dbadmin, schema astradb, password from Secrets Manager.
 
-### Access RDS through an SSM tunnel
+### Access RDS through an SSM tunnel for eks-development
 
 No relay pod needed — this forwards through a node's SSM agent instead, so it
 works even when the cluster is unhealthy. This is what the local web app and
@@ -198,6 +279,22 @@ app/.env.local.
 Check it is up with:
 
 nc -z 127.0.0.1 13306 && echo "tunnel up"
+
+### Access RDS through an SSM tunnel for eks-production
+
+# Terminal 1 — tunnel to production RDS via a production node
+
+aws ssm describe-instance-information --query "InstanceInformationList[?PingStatus=='Online'].InstanceId" --output text
+
+aws ssm start-session --target <a-production-node-id> \
+ --document-name AWS-StartPortForwardingSessionToRemoteHost \
+ --parameters '{"host":["astra-mysql-db-production.chheppac9ozc.us-east-1.rds.amazonaws.com"],"portNumber":["3306"],"localPortNumber":["13307"]}'
+
+# Terminal 2
+
+cd /Users/alex/Desktop/ClassActivity/ASTRA/app
+DATABASE_URL="mysql://dbadmin:<password-from-secrets-manager>@127.0.0.1:13307/astradb" npx prisma migrate deploy
+DATABASE_URL="..." SEED_OPERATOR_USERNAME=alex SEED_OPERATOR_PASSWORD='your-choice' SEED_OPERATOR_NAME=alex npm run seed
 
 ### Clean up the relay pods
 
