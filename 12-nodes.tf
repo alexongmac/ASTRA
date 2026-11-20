@@ -115,9 +115,9 @@ resource "aws_eks_node_group" "general" {
   }
 
   scaling_config {
-    desired_size = 2
-    max_size     = 6
-    min_size     = 2
+    desired_size = 5
+    max_size     = 8
+    min_size     = 3
   }
 
   # 1 means nodes get replaced one at a time during a node group update

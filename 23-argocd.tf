@@ -10,8 +10,16 @@ resource "helm_release" "argocd" {
   name       = "argocd"
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
-  version    = "7.9.1" # app v2.14.11 - newest patch still on the v2 line; v3.x (chart 8+) has breaking changes
-  namespace  = kubernetes_namespace.argocd.metadata[0].name
+  # app v3.6.2. Moved off the v2 line (chart 7.x, app v2.14.11) because
+  # v2.14's bundled OpenAPI schema predates Kubernetes 1.37 and does not know
+  # Deployment's status.terminatingReplicas, so ArgoCD's structured-merge diff
+  # failed with "field not declared in schema" and left the traefik
+  # Application permanently Unknown, unable to detect drift or self-heal.
+  #
+  # The v3 CRDs are applied separately with kubectl: helm upgrade does not
+  # upgrade CRDs, so they have to be in place before this chart rolls.
+  version   = "10.18.2"
+  namespace = kubernetes_namespace.argocd.metadata[0].name
 
   # Traefik terminates TLS in front of argocd-server, so it must run
   # plaintext internally or it 307-redirect-loops every request (it thinks
