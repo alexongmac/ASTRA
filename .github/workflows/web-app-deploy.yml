@@ -6,6 +6,12 @@ on:
     paths:
       - "app/**"
       - ".github/workflows/web-app-deploy.yml"
+  # Lets the image be rebuilt without an app/** change. Needed when the
+  # cluster's architecture moves out from under an existing image: after the
+  # nodes went from t4g.large (arm64) to t3.medium (x86_64), the last
+  # production image was still arm64 and every pod crash-looped with
+  # "exec format error", with no app change pending to trigger a rebuild.
+  workflow_dispatch:
 
 permissions:
   id-token: write # Required for OIDC (ECR push)
