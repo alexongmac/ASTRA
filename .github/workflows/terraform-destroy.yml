@@ -51,6 +51,10 @@ jobs:
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
 
+      # No `run:` step calls helm directly any more, but terraform destroy
+      # below still destroys helm_release.argocd, so the provider needs it.
+      # Drop this only together with 23-argocd.tf, if the kustomize migration
+      # in the README is completed.
       - name: Setup Helm
         uses: azure/setup-helm@v4
 
@@ -58,24 +62,35 @@ jobs:
         continue-on-error: true
         run: aws eks update-kubeconfig --region "${{ vars.AWS_REGION }}" --name "astra-eks-${ENVIRONMENT}-cluster"
 
-      - name: Delete ArgoCD Applications (stop self-heal before uninstalling charts)
+      # This is the real teardown for everything ASTRA_argocd deploys, Helm
+      # charts included.
+      #
+      # ArgoCD does NOT create Helm releases. For an Application with
+      # source.chart (traefik, kyverno, kube-prometheus-stack, loki,
+      # trivy-operator, promtail, cluster-autoscaler,
+      # aws-load-balancer-controller) ArgoCD runs `helm template` internally
+      # and applies the rendered manifests itself, so there is no release
+      # secret and `helm list` never shows them - on development it lists
+      # ArgoCD's own release and nothing else. Deleting the Application is
+      # what removes those resources: each carries ArgoCD's
+      # resources-finalizer, so the delete cascades to everything the
+      # Application created.
+      #
+      # There used to be a "Helm uninstall ArgoCD-managed releases" step here
+      # that ran `helm list | awk '$2 != "argocd"'`. Since ArgoCD's charts are
+      # not releases, that filter matched nothing, the loop ran zero times and
+      # the step always exited 0 - it never uninstalled anything, and
+      # continue-on-error hid that it was inert. Removed rather than fixed:
+      # this delete is the correct mechanism, and terraform destroy below
+      # takes the cluster regardless.
+      #
+      # --timeout lets the finalizers actually run. Without it the step can
+      # return while deletion is still in progress, and the namespace delete
+      # and terraform destroy below race it.
+      - name: Delete ArgoCD Applications (cascades to their resources)
         continue-on-error: true
         run: |
-          kubectl delete application --all -n argocd || true
-
-      # Uninstalls every release ArgoCD/ASTRA_argocd deployed, whatever it's
-      # named, so this list never drifts out of sync with Applications/.
-      # ArgoCD's own release lives outside ASTRA_argocd (installed by this
-      # repo's helm_release.argocd), so it's excluded here and handled by
-      # the dedicated "Uninstall ArgoCD" step below instead.
-      - name: Helm uninstall ArgoCD-managed releases (best-effort)
-        continue-on-error: true
-        run: |
-          helm list --all-namespaces --no-headers | awk '$2 != "argocd" {print $1, $2}' | \
-          while read -r name namespace; do
-            echo "Uninstalling $name in $namespace"
-            helm uninstall "$name" -n "$namespace" || true
-          done
+          kubectl delete application --all -n argocd --timeout=300s || true
 
       # Pinned to v3.6.2, the version 23-argocd.tf's helm_release actually
       # installs (chart 10.18.2 -> app v3.6.2). This used to reference
