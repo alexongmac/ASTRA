@@ -39,6 +39,18 @@ resource "aws_launch_template" "nodes" {
   name_prefix   = "${local.eks_name}-ec2"
   instance_type = "t4g.large"
 
+  # EKS managed node groups do not use this template directly: they copy it
+  # into an internal eks-<uuid> template that the ASG references. The 6am
+  # sweep deletes those copies (they carry no tags to protect), which leaves
+  # the node group DEGRADED with Ec2LaunchTemplateNotFound and crashes
+  # cluster-autoscaler, while terraform plan reports no drift because the
+  # template it owns is still there.
+  #
+  # Changing this description publishes a new version of this template, which
+  # makes EKS regenerate its internal copy and repoint the ASG. Bump the date
+  # to force that regeneration after a sweep has taken the copy.
+  description = "astra nodes, regenerated 2026-11-20"
+
   # The AMI's default ~20 GiB root volume fills up with the monitoring/policy
   # stack's images and hits kubelet DiskPressure evictions.
   block_device_mappings {
