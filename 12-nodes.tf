@@ -36,8 +36,12 @@ resource "aws_iam_role_policy_attachment" "amazon_ssm_managed_instance_core" {
 }
 
 resource "aws_launch_template" "nodes" {
-  name_prefix   = "${local.eks_name}-ec2"
-  instance_type = "t4g.large"
+  name_prefix = "${local.eks_name}-ec2"
+  # x86_64. Must stay in step with ami_type on the node group below, and with
+  # the runs-on runner in .github/workflows/web-app-deploy.yml: an image built
+  # for a different architecture fails at pod start with "no match for platform
+  # in manifest".
+  instance_type = "t3.medium"
 
   # EKS managed node groups do not use this template directly: they copy it
   # into an internal eks-<uuid> template that the ASG references. The 6am
@@ -99,7 +103,11 @@ resource "aws_eks_node_group" "general" {
   ]
 
   capacity_type = "ON_DEMAND"
-  ami_type      = "AL2023_ARM_64_STANDARD"
+  # Paired with instance_type = "t3.medium" above. t3.medium has 4 GiB against
+  # t4g.large's 8, so the monitoring/policy stack (kube-prometheus-stack, Loki,
+  # Kyverno, Trivy) runs with much less headroom here; watch for evicted pods
+  # and raise min_size if they appear.
+  ami_type = "AL2023_x86_64_STANDARD"
 
   launch_template {
     id      = aws_launch_template.nodes.id
