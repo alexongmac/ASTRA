@@ -19,6 +19,15 @@ jobs:
   CICD:
     runs-on: ubuntu-latest
 
+    # Same gate terraform-apply.yml puts on its apply job. Settings >
+    # Environments > production has required reviewers, so a production
+    # destroy pauses for an approval before anything is torn down; the
+    # development environment has no rules, so dev destroys run straight
+    # through. Without this key the dropdown above is the ONLY thing
+    # standing between a mis-click and a destroyed production cluster -
+    # destroying would be easier than applying, which is backwards.
+    environment: ${{ inputs.environment }}
+
     env:
       ENVIRONMENT: ${{ inputs.environment }}
 

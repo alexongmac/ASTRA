@@ -353,56 +353,77 @@ terraform plan -var-file="envs/development.tfvars" -target="helm_release.argocd"
 
 terraform apply -var-file="envs/development.tfvars" -target="helm_release.argocd"
 
-### Bootstrap the astra AppProject, Traefik and the root Application
+### Bootstrap the astra AppProject, Traefik and the root Applications
 
-Once ArgoCD itself is running, apply these three manifests from the
-ASTRA_argocd repo's `bootstrap/` folder. Use the branch matching the cluster:
-`develop` for development, `main` for production.
+Once ArgoCD itself is running, apply four manifests from the ASTRA_argocd
+repo's `bootstrap/` folder. Every file is per environment and already carries
+the right `targetRevision`, so there is no `kubectl patch` step and nothing to
+edit by hand — just pick the matching set.
 
 They are applied with kubectl rather than Terraform because the
 `kubectl_manifest` resource validates at plan time and rejects a manifest whose
 CRDs do not exist yet — for example a ClusterPolicy before Kyverno has synced —
 which blocked `terraform plan` entirely.
 
-### Option A: one file (development only)
+**Check the kube context first.** Nothing in these manifests names a cluster
+(they all say `server: https://kubernetes.default.svc`, meaning "the cluster I
+am running in"), so they go wherever the active context points. This is a
+separate switch from the Terraform backend above — `aws eks update-kubeconfig`
+changes it as a side effect, so it can easily be left on the wrong cluster.
 
-argocd-app-deploy.yaml bundles astra-project.yaml, traefik-app.yaml, and
-root-app.yaml into a single multi-document manifest, with targetRevision
-already set to `develop` so the separate `kubectl patch` below isn't needed:
+kubectl config current-context
 
-kubectl apply -f argocd-app-deploy.yaml
+Development:
 
-kubectl applies all three documents immediately but doesn't wait for Traefik
-to finish syncing before root-app's comparison runs - if that first sync
-fails on the missing traefik IngressClass, just re-run the same command once
-Traefik is synced (`kubectl get application traefik -n argocd`); astra-root's
-retry policy (limit 5, backoff) usually recovers on its own anyway. For
-production, don't use this file (it's pinned to `develop`) - use Option B.
+kubectl config use-context arn:aws:eks:us-east-1:255945442255:cluster/astra-eks-development-cluster
+BRANCH=develop ENV=development
 
-### Option B: step by step (any environment)
+Production:
 
-the AppProject every Application references:
+kubectl config use-context arn:aws:eks:us-east-1:255945442255:cluster/astra-eks-production-cluster
+BRANCH=main ENV=production
 
-kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/astra-project.yaml
+Then, in order. First the AppProject every Application references:
 
-Traefik must be installed BEFORE the root app - the traefik-classed ingresses
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/$BRANCH/bootstrap/astra-project.yaml
+
+Traefik must be installed BEFORE the root apps - the traefik-classed ingresses
 in Applications/ fail ArgoCD's server-side-diff comparison if the traefik
 IngressClass doesn't exist yet (the AWS LB controller webhook rejects them),
 which would deadlock the whole root app. So Traefik is applied standalone here:
 
-kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/traefik-app.yaml
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/$BRANCH/bootstrap/traefik-app-$ENV.yaml
 
-then the root app-of-apps that syncs everything in Applications/:
+Wait for it to settle before continuing:
 
-kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/develop/bootstrap/root-app.yaml
+kubectl get application traefik -n argocd
 
-### Point root-app at the right branch
+then the two root app-of-apps. The first syncs the shared `Applications/`
+folder, the second the environment's own `Applications/$ENV/` folder, which
+the first does not pick up because it sets `recurse: false`:
 
-**Important:** `root-app.yaml` ships with `targetRevision: main`. On the
-development cluster it must be changed to `develop`, or the app-of-apps tracks
-the wrong branch.
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/$BRANCH/bootstrap/root-app-$ENV.yaml
+kubectl apply -f https://raw.githubusercontent.com/alexongmac/ASTRA_argocd/$BRANCH/bootstrap/root-app-$ENV-env.yaml
 
-kubectl patch application astra-root -n argocd --type merge -p '{"spec":{"source":{"targetRevision":"develop"}}}'
+If a root app's first sync fails on the missing traefik IngressClass, re-run
+that same command once Traefik is synced; its retry policy (limit 5, backoff)
+usually recovers on its own anyway.
+
+There used to be a generic `bootstrap/root-app.yaml` (app name `astra-root`,
+pinned to `main`) and an `argocd-app-deploy.yaml` in this repo that bundled
+three of these manifests into one apply. Both are deleted: the per-environment
+files above replace them, and each already carries the right `targetRevision`.
+
+If `kubectl get applications -n argocd` on a cluster still shows a plain
+`astra-root`, it was created by that old bundle and is a leftover. It does the
+same job as `astra-root-$ENV` but under the wrong name and with no file behind
+it, and on a cluster that also runs `astra-root-$ENV` the two reconcile the
+same `Applications/` folder with `prune: true` on both. Migrating one off is
+not a rename: ArgoCD tracks ownership with an
+`argocd.argoproj.io/instance: <app name>` label on every resource, so the
+children have to be relabelled to the new app BEFORE the old one is removed,
+and the old one must be deleted with `--cascade=orphan` or it takes Kyverno,
+Prometheus, Trivy and the RBAC objects with it.
 
 ### Confirm ArgoCD has taken over
 
