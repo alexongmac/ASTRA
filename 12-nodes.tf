@@ -130,6 +130,29 @@ resource "aws_eks_node_group" "general" {
     role = aws_iam_role.nodes.name
   }
 
+  # Set explicitly rather than relying on provider default_tags. EKS creates its
+  # own internal launch template (named eks-<nodegroup-uuid>) for the ASG and
+  # stamps some of the node group's tags onto it; that internal copy is what the
+  # nightly sweep deletes, leaving the node group DEGRADED with
+  # Ec2LaunchTemplateNotFound while terraform plan still reports no drift.
+  #
+  # Honest caveat: this is defence-in-depth, not a proven fix. On 2026-11-21 the
+  # sweep deleted the internal template of 3 of 4 teams' node groups. The two
+  # that survived (capstone-project-group-03) carry the same kind of tags this
+  # block sets, and their internal templates do show a propagated Project tag -
+  # but group-04 carries MORE tags than they do and was deleted anyway, and ours
+  # already carried Project/Environment/Team/NukeProtection on the node group
+  # itself and was deleted too. The likelier differentiator is resource age: the
+  # survivors' templates date from 2026-11-13 and predate the sweep window,
+  # while every template created in the last few days was taken. Confirm the
+  # nuke config's filters with the instructor before trusting tags alone.
+  tags = {
+    Project        = "capstone-project-group-01"
+    Environment    = var.environment
+    Team           = local.team_name
+    NukeProtection = "Enabled"
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.amazon_eks_worker_node_policy,
     aws_iam_role_policy_attachment.amazon_eks_cni_policy,

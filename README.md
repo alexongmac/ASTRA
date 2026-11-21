@@ -3,6 +3,16 @@
 Working commands for the development and production clusters. Run everything
 from the repo root unless a section says otherwise.
 
+### The actual launch order
+
+1. terraform apply → VPC, EKS, nodes, cert, WAF, IAM, pod identity
+2. kubectl apply -k bootstrap/argocd-install/ → ArgoCD
+3. kubectl apply bootstrap/astra-project.yaml → AppProject
+   kubectl apply bootstrap/traefik-app-ENV.yaml → Traefik + IngressClass
+   kubectl apply bootstrap/root-app-ENV.yaml → Applications/
+   kubectl apply bootstrap/root-app-ENV-env.yaml → Applications/ENV/
+4. ArgoCD syncs web-app-ENV → reads envs/ENV/web-app/ → app runs
+
 ### One-time setup, after provider.tf changes
 
 terraform init -reconfigure
@@ -426,6 +436,7 @@ Disable self-heal first, apply the change, then trigger a sync. Re-enable
 self-heal afterwards, or ArgoCD will revert the change on its next pass.
 
 kubectl patch application <applications> -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":false}}}}'
+
 kubectl apply -f <manifest file>.yaml
 kubectl patch application <applications> -n argocd --type merge -p '{"operation":{"sync":{}}}'
 
@@ -443,85 +454,3 @@ it leaves an empty map that serialises as `null`, which never equals the live
 object's absent key. The fix is to declare any real label in git — the four
 child Applications and the ClusterIssuer in `Applications/` carry
 `app.kubernetes.io/part-of: astra` for exactly this reason.
-
-### Migrating ArgoCD off Terraform onto the kustomize bootstrap
-
-**Status: prepared, not done.** `ASTRA_argocd/bootstrap/argocd-install/`
-holds a working Kustomize setup (upstream `install.yaml` pinned to v3.6.2,
-plus patches for the resource limits, `server.insecure` and
-`accounts.developer`). It is not yet the live installer.
-
-Why bother: `provider "kubernetes"` and `provider "helm"` in `2-provider.tf`
-call `aws eks get-token` against the cluster endpoint at **plan** time, so
-`terraform plan` needs a reachable, healthy cluster — exactly what you do not
-have when something is broken. A cert-manager CA rotation once failed the
-apply with an x509 webhook error, and the production node-group outage blocked
-it too. `23-argocd.tf` holds the only real uses of both providers, so removing
-it makes Terraform pure AWS-API again. Helm also never upgrades CRDs, so the
-v3 CRDs were already being applied by hand; the kustomize path includes them.
-
-**This cannot be done in place.** Applying the kustomization over a
-Helm-installed ArgoCD rejects all 7 workloads:
-
-    Deployment.apps "argocd-server" is invalid: spec.selector: Invalid value:
-    {"matchLabels":{"app.kubernetes.io/name":"argocd-server"}}: field is immutable
-
-The chart's selector carries `app.kubernetes.io/instance: argocd` as well as
-the name label; upstream's carries only the name, and `spec.selector` is
-immutable. ConfigMaps, Services, RBAC and NetworkPolicies do apply cleanly, so
-a partial attempt leaves a half-owned install.
-
-Do this on a quiet cluster, one environment at a time. ArgoCD being down stops
-syncing, not running workloads — pods keep serving throughout.
-
-    # 0. development first. Confirm which cluster you are on.
-    kubectl config current-context
-
-    # 1. Record what is live, so you can compare afterwards.
-    kubectl get app -n argocd -o name | wc -l        # expect 11 on dev
-    kubectl -n argocd get cm argocd-cm -o json | jq '.data | keys | length'
-
-    # 2. Remove the Helm release. Applications are CRs, not Helm-managed, so
-    #    they survive - but verify rather than trust this.
-    helm uninstall argocd -n argocd
-    kubectl get app -n argocd -o name | wc -l        # must still be 11
-
-    # 3. Install from the kustomization.  --server-side is REQUIRED: the
-    #    ApplicationSet CRD exceeds the 256KB annotation limit that
-    #    client-side apply needs for last-applied-configuration.
-    cd ../ASTRA_argocd
-    kubectl apply --server-side -k bootstrap/argocd-install/
-    kubectl -n argocd rollout status deploy/argocd-server
-
-    # 4. Verify before touching Terraform.
-    kubectl get app -n argocd        # 11/11 Synced + Healthy
-    kubectl -n argocd get cm argocd-cm -o json | jq '.data | keys | length'
-    # expect 10: upstream's 9 + accounts.developer from cm-patch.yaml
-
-    # 5. Only now is argocd-cm safe to drop from
-    #    Applications/argocd-rbac.yaml, because the kustomization owns the
-    #    complete object. Removing it earlier makes astra-root-ENV's
-    #    prune: true delete the whole ConfigMap - see that file's comment.
-
-    # 6. Drop the resources from Terraform state so a later apply or destroy
-    #    does not tear down the ArgoCD you just installed. ONE TIME, and per
-    #    environment: the backend key differs, so init first.
-    cd ../ASTRA
-    terraform init -reconfigure -backend-config="key=astra/development.tfstate"
-    terraform state rm helm_release.argocd kubernetes_namespace.argocd
-
-    # 7. The gate. If this wants to destroy anything ArgoCD-related, STOP.
-    terraform plan -var-file=envs/development.tfvars
-
-    # 8. Delete 23-argocd.tf, and the kubernetes + helm provider blocks and
-    #    their required_providers entries in 2-provider.tf. Keep 23-argocd.tf's
-    #    closing comment about why the AppProject and root Applications are
-    #    applied with kubectl - that reasoning still holds.
-    terraform plan -var-file=envs/development.tfvars   # still no destroys
-
-    # 9. Repeat 0-8 for production with its own backend key.
-
-Note `state rm` is one-time migration surgery and deliberately **not** in
-`terraform-destroy.yml`. In a destroy it would have the opposite effect —
-telling Terraform to forget those resources so it skips them, orphaning the
-namespace — and it errors once they are no longer in state.
