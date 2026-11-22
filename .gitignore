@@ -63,4 +63,6 @@ lambda/layer/
 *.csv
 
 # migrations/*.sql are tracked schema/seed scripts, not throwaway dumps
-!migrations/*.sql
+!migrations/*.sqlgrafana-backup.db
+grafana-backup.db*
+grafana-backup.db*

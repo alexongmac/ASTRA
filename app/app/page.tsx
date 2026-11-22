@@ -64,7 +64,7 @@ export default async function DashboardPage({
     <main className="min-h-screen bg-slate-900 px-6 py-5">
       <AutoRefresh />
       <header className="flex items-center justify-between">
-        <h1 className="text-sm font-semibold text-white">R2D2 · Alarm Acknowledgement</h1>
+        <h1 className="text-sm font-semibold text-white">R2D2 · Operation Excellence</h1>
         <div className="flex items-center gap-3 text-xs text-slate-300">
           <span>Signed in as {session.user.name}</span>
           <form action={logout}>
@@ -77,7 +77,7 @@ export default async function DashboardPage({
 
       <nav className="mt-5 flex gap-2">
         <Tab href="/" label={`Active alarms (${active.length})`} active={!showHistory} />
-        <Tab href="/?tab=history" label="History" active={showHistory} />
+        <Tab href="/?tab=history" label="Alarm History" active={showHistory} />
       </nav>
 
       {showHistory ? (

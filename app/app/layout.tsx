@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "R2D2 · Alarm Acknowledgement",
-  description: "Operator response to R2D2 OEE machine alarms",
+  title: "R2D2 · Operation Excellence",
+  description: "Operator response to R2D2 OEE machine",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
