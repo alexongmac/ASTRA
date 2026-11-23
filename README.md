@@ -174,6 +174,12 @@ curl -s https://www.amazontrust.com/repository/AmazonRootCA1.pem > certs/AmazonR
 chmod 600 certs/nodered-bridge.key
 ls -l certs/
 
+### Scaling nodes to require capacity
+
+aws autoscaling set-desired-capacity --region us-east-1 \
+ --auto-scaling-group-name eks-astra-eks-development-nodes-22d0fde4-b43e-fc99-55cf-f98fb2be5c2f \
+ --desired-capacity 7
+
 ### Kyverno policy reports
 
 kubectl get polr -A
@@ -454,3 +460,56 @@ it leaves an empty map that serialises as `null`, which never equals the live
 object's absent key. The fix is to declare any real label in git — the four
 child Applications and the ClusterIssuer in `Applications/` carry
 `app.kubernetes.io/part-of: astra` for exactly this reason.
+
+### Setting up discord
+
+Step 1 — Create the Discord webhook
+In Discord, on a server where you have Manage Webhooks:
+
+Create a channel, e.g. #astra-alerts
+Channel name → Edit Channel → Integrations → Webhooks → New Webhook
+Name it Alertmanager
+Copy Webhook URL
+
+Step 2 — Put the URL in a Kubernetes secret
+Run this yourself and paste your own URL in place of the placeholder:
+
+kubectl create secret generic alertmanager-discord \
+ -n monitoring \
+ --from-literal=webhook-url='https://discord.com/api/webhooks/YOUR/URL_HERE'
+
+Verify it exists without printing the value:
+
+kubectl get secret alertmanager-discord -n monitoring
+
+### Credentials for astra-prom.sctp-sandbox.com
+
+kubectl get secret -n monitoring monitoring-basic-auth \
+ -o jsonpath='{.data.username}' | base64 -d ; echo
+
+kubectl get secret -n monitoring monitoring-basic-auth \
+ -o jsonpath='{.data.password}' | base64 -d ; echo
+
+### Checking on Promtail
+
+# Health
+
+kubectl get ds -n monitoring promtail
+
+# Its own logs
+
+kubectl logs -n monitoring -l app.kubernetes.io/name=promtail --tail=20
+
+### Send failures only — this is the one that matters
+
+kubectl logs -n monitoring -l app.kubernetes.io/name=promtail --tail=200 \
+ | grep -iE 'error sending|429|final error|context deadline'
+
+### Rebuild auto-scaler after the sweep
+
+C=arn:aws:eks:us-east-1:255945442255:cluster/astra-eks-development-cluster
+kubectl --context "$C" -n kube-system delete pod cluster-autoscaler-aws-cluster-autoscaler-548f4b6878-5xzp9 2>&1
+until kubectl --context "$C" -n kube-system get pods 2>/dev/null | grep cluster-autoscaler | grep -q ' 1/1 .\*Running'; do sleep 5; done
+kubectl --context "$C" -n kube-system get pods | grep cluster-autoscaler
+sleep 20
+kubectl --context "$C" -n kube-system logs deploy/cluster-autoscaler-aws-cluster-autoscaler --tail=200 2>&1 | grep -Ei 'AccessDenied|Failed|static_autoscaler|node group|Scale-down' | tail -8
