@@ -14,9 +14,9 @@ resource "aws_iam_role" "grafana" {
 }
 
 # Read-only, and limited to the calls Grafana's CloudWatch datasource makes
-# for metrics and alarms. No logs:* - Grafana reads logs from Loki - and no
-# write actions of any kind. CloudWatch metric reads do not support
-# resource-level scoping, hence Resource = "*".
+# for metrics, alarms and Logs Insights queries. No write actions of any kind.
+# CloudWatch reads do not support resource-level scoping, hence
+# Resource = "*".
 data "aws_iam_policy_document" "grafana_cloudwatch" {
   statement {
     effect = "Allow"
@@ -27,6 +27,24 @@ data "aws_iam_policy_document" "grafana_cloudwatch" {
       "cloudwatch:ListMetrics",
       "cloudwatch:GetMetricData",
       "cloudwatch:GetMetricStatistics",
+    ]
+    resources = ["*"]
+  }
+
+  # Read-only CloudWatch Logs access, so the datasource's "Save & test" passes
+  # its logs check and CloudWatch Logs (e.g. EKS control-plane or WAF logs) can
+  # be queried from Grafana later. Query actions only start and read Logs
+  # Insights queries; nothing here can write, delete or change log data. The
+  # web-app dashboard itself reads its logs from Loki, not from here.
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:GetLogGroupFields",
+      "logs:StartQuery",
+      "logs:StopQuery",
+      "logs:GetQueryResults",
+      "logs:GetLogEvents",
     ]
     resources = ["*"]
   }

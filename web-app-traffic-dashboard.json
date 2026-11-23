@@ -1,0 +1,904 @@
+{
+  "uid": "astra-web-traffic",
+  "title": "ASTRA Web App Traffic",
+  "tags": [
+    "astra",
+    "web-app"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "cw",
+        "label": "CloudWatch",
+        "type": "datasource",
+        "query": "cloudwatch",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "prom",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "loki",
+        "label": "Loki",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "lb",
+        "type": "constant",
+        "query": "app/k8s-development-astra-web/d16c5e99d8185eea",
+        "hide": 2,
+        "current": {
+          "value": "app/k8s-development-astra-web/d16c5e99d8185eea",
+          "text": "app/k8s-development-astra-web/d16c5e99d8185eea"
+        },
+        "options": [
+          {
+            "value": "app/k8s-development-astra-web/d16c5e99d8185eea",
+            "text": "app/k8s-development-astra-web/d16c5e99d8185eea",
+            "selected": true
+          }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Requests",
+      "description": "Total requests through the ALB in the selected time range.",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "${cw}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "A",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "RequestCount",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "Sum"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Error rate (5XX %)",
+      "description": "Share of requests that returned a 5XX from the app. Average over the range.",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "${cw}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "A",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "req",
+          "label": "",
+          "hide": true,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "RequestCount",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "B",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "e5",
+          "label": "",
+          "hide": true,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "C",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "errpct",
+          "label": "5XX %",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 1,
+          "expression": "100 * FILL(e5, 0) / req",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
+          "statistic": "Average"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "p95 latency",
+      "description": "95th-percentile time the app took to respond.",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "${cw}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "A",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "WAF blocked",
+      "description": "Requests the web ACL blocked (scanners, SQLi, XSS probes).",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "${cw}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "A",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/WAFV2",
+          "metricName": "BlockedRequests",
+          "dimensions": {
+            "WebACL": "astra-eks-development-web-app",
+            "Region": "us-east-1",
+            "Rule": "ALL"
+          },
+          "statistic": "Sum"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Requests by status class",
+      "description": "",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "${cw}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "A",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "2XX",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_2XX_Count",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "B",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "4XX",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_4XX_Count",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "C",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "5XX",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_Target_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "D",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "ALB 5XX",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "HTTPCode_ELB_5XX_Count",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "Sum"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Response time",
+      "description": "",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "${cw}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "A",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "avg",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "Average"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "B",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "p95",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/ApplicationELB",
+          "metricName": "TargetResponseTime",
+          "dimensions": {
+            "LoadBalancer": "${lb}"
+          },
+          "statistic": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "WAF: allowed vs blocked",
+      "description": "",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "${cw}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "A",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "allowed",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/WAFV2",
+          "metricName": "AllowedRequests",
+          "dimensions": {
+            "WebACL": "astra-eks-development-web-app",
+            "Region": "us-east-1",
+            "Rule": "ALL"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "B",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "blocked",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/WAFV2",
+          "metricName": "BlockedRequests",
+          "dimensions": {
+            "WebACL": "astra-eks-development-web-app",
+            "Region": "us-east-1",
+            "Rule": "ALL"
+          },
+          "statistic": "Sum"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "WAF blocks by rule group",
+      "description": "",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "${cw}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "A",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "CommonRuleSet",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/WAFV2",
+          "metricName": "BlockedRequests",
+          "dimensions": {
+            "WebACL": "astra-eks-development-web-app",
+            "Region": "us-east-1",
+            "Rule": "AWSManagedRulesCommonRuleSet"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "B",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "SQLiRuleSet",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/WAFV2",
+          "metricName": "BlockedRequests",
+          "dimensions": {
+            "WebACL": "astra-eks-development-web-app",
+            "Region": "us-east-1",
+            "Rule": "AWSManagedRulesSQLiRuleSet"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "C",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "KnownBadInputsRuleSet",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/WAFV2",
+          "metricName": "BlockedRequests",
+          "dimensions": {
+            "WebACL": "astra-eks-development-web-app",
+            "Region": "us-east-1",
+            "Rule": "AWSManagedRulesKnownBadInputsRuleSet"
+          },
+          "statistic": "Sum"
+        },
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "${cw}"
+          },
+          "refId": "D",
+          "queryMode": "Metrics",
+          "region": "us-east-1",
+          "id": "",
+          "label": "AmazonIpReputationList",
+          "hide": false,
+          "period": "",
+          "matchExact": true,
+          "metricQueryType": 0,
+          "sqlExpression": "",
+          "metricEditorMode": 0,
+          "expression": "",
+          "namespace": "AWS/WAFV2",
+          "metricName": "BlockedRequests",
+          "dimensions": {
+            "WebACL": "astra-eks-development-web-app",
+            "Region": "us-east-1",
+            "Rule": "AWSManagedRulesAmazonIpReputationList"
+          },
+          "statistic": "Sum"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Pod CPU (cores)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "refId": "A",
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"web-app\", container!=\"\"}[5m]))",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Pod memory",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prom}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prom}"
+          },
+          "refId": "A",
+          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"web-app\", container!=\"\"})",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "logs",
+      "title": "web-app logs",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "${loki}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${loki}"
+          },
+          "refId": "A",
+          "expr": "{namespace=\"web-app\"}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
+    }
+  ]
+}
