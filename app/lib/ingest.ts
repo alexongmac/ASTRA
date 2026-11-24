@@ -134,6 +134,18 @@ async function reconcileAlarms(
         where: { id: open.id },
         data: { status: "cleared", clearedAt: new Date() },
       });
+      // Mirror the raise message: tell Discord when a CRITICAL alarm clears.
+      if (open.severity === "CRITICAL") {
+        await notifyDiscord({
+          severity: open.severity,
+          machine: open.machine,
+          product: open.product,
+          title: open.title,
+          detail: null,
+          cleared: true,
+          raisedAt: open.raisedAt,
+        });
+      }
     }
   }
 }
