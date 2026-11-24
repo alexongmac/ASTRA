@@ -19,17 +19,18 @@ model Operator {
 }
 
 model MachineEvent {
-  id       BigInt   @id @default(autoincrement())
-  v        Int
-  ts       DateTime @db.DateTime(3)
-  runId    BigInt   @map("run_id")
-  machine  String   @db.VarChar(64)
-  event    String   @db.VarChar(64)
-  detail   String?  @db.Text
-  gear     String?  @db.VarChar(16)
-  conveyor String?  @db.VarChar(16)
-  output   String?  @db.VarChar(16)
-  oee      Float?
+  id          BigInt   @id @default(autoincrement())
+  v           Int
+  ts          DateTime @db.DateTime(3)
+  runId       BigInt   @map("run_id")
+  machine     String   @db.VarChar(64)
+  productName String?  @map("product_name") @db.VarChar(64)
+  event       String   @db.VarChar(64)
+  detail      String?  @db.Text
+  gear        String?  @db.VarChar(16)
+  conveyor    String?  @db.VarChar(16)
+  output      String?  @db.VarChar(16)
+  oee         Float?
 
   @@index([machine, ts])
   @@index([runId])
@@ -37,25 +38,25 @@ model MachineEvent {
 }
 
 model OeeSummary {
-  id              BigInt   @id @default(autoincrement())
-  v               Int
-  ts              DateTime @db.DateTime(3)
-  runId           BigInt   @map("run_id")
-  machine         String   @db.VarChar(64)
-  product         String?  @db.VarChar(64)
-  availability    Float?
-  performance     Float?
-  quality         Float?
-  oee             Float?
-  total           Int?
-  good            Int?
-  defect          Int?
-  elapsedS        Int?     @map("elapsed_s")
-  downtimeS       Int?     @map("downtime_s")
-  setupS          Int?     @map("setup_s")
-  runtimeS        Int?     @map("runtime_s")
-  plannedTimeMin  Int?     @map("planned_time_min")
-  idealCycleS     Float?   @map("ideal_cycle_s")
+  id             BigInt   @id @default(autoincrement())
+  v              Int
+  ts             DateTime @db.DateTime(3)
+  runId          BigInt   @map("run_id")
+  machine        String   @db.VarChar(64)
+  product        String?  @db.VarChar(64)
+  availability   Float?
+  performance    Float?
+  quality        Float?
+  oee            Float?
+  total          Int?
+  good           Int?
+  defect         Int?
+  elapsedS       Int?     @map("elapsed_s")
+  downtimeS      Int?     @map("downtime_s")
+  setupS         Int?     @map("setup_s")
+  runtimeS       Int?     @map("runtime_s")
+  plannedTimeMin Int?     @map("planned_time_min")
+  idealCycleS    Float?   @map("ideal_cycle_s")
 
   @@index([machine, ts])
   @@index([runId])
@@ -75,17 +76,17 @@ enum AlarmStatus {
 }
 
 model Alarm {
-  id          BigInt        @id @default(autoincrement())
+  id       BigInt        @id @default(autoincrement())
   // Stable identifier for the rule that raised this alarm (e.g. "gear_down").
   // Together with machine + runId it defines the dedupe key for an open alarm.
-  ruleKey     String        @map("rule_key") @db.VarChar(64)
-  severity    AlarmSeverity
-  status      AlarmStatus   @default(raised)
-  machine     String        @db.VarChar(64)
-  product     String?       @db.VarChar(64)
-  runId       BigInt?       @map("run_id")
-  title       String        @db.VarChar(255)
-  detail      String?       @db.Text
+  ruleKey  String        @map("rule_key") @db.VarChar(64)
+  severity AlarmSeverity
+  status   AlarmStatus   @default(raised)
+  machine  String        @db.VarChar(64)
+  product  String?       @db.VarChar(64)
+  runId    BigInt?       @map("run_id")
+  title    String        @db.VarChar(255)
+  detail   String?       @db.Text
 
   raisedAt       DateTime  @default(now()) @map("raised_at") @db.DateTime(3)
   acknowledgedAt DateTime? @map("acknowledged_at") @db.DateTime(3)

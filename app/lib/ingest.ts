@@ -35,7 +35,7 @@ export async function processMessage(payload: unknown): Promise<void> {
     await reconcileAlarms(
       payload.machine,
       runId,
-      null,
+      payload.product ?? null,
       evaluateEventRules(payload),
     );
     return;
@@ -53,6 +53,7 @@ async function storeEvent(event: OeeEvent, runId: number) {
       ts: new Date(event.ts),
       runId: BigInt(runId),
       machine: event.machine,
+      productName: event.product ?? null,
       event: event.event,
       detail: event.detail ?? null,
       gear: event.state?.gear ?? null,
@@ -88,6 +89,31 @@ async function storeSummary(summary: OeeSummary, runId: number) {
   });
 }
 
+// The product the machine most recently reported in an OEE summary, preferring
+// the same run. Never throws: a failed lookup must not stop an alarm being
+// raised, it just leaves the product blank. With no run id (no run active) this
+// is the machine's last known product, which may be from an earlier run.
+async function latestProduct(
+  machine: string,
+  runId: number | undefined,
+): Promise<string | null> {
+  try {
+    const row = await prisma.oeeSummary.findFirst({
+      where: {
+        machine,
+        product: { not: null },
+        ...(runId !== undefined ? { runId: BigInt(runId) } : {}),
+      },
+      orderBy: { ts: "desc" },
+      select: { product: true },
+    });
+    return row?.product ?? null;
+  } catch (error) {
+    console.error("Product lookup failed:", (error as Error).message);
+    return null;
+  }
+}
+
 // Raises an alarm when a rule becomes active and no open alarm exists for it,
 // and clears the open alarm once the same rule reports inactive.
 async function reconcileAlarms(
@@ -107,12 +133,16 @@ async function reconcileAlarms(
     });
 
     if (verdict.active && !open) {
+      // Event messages carry no product, so fall back to the one the machine
+      // last reported in a summary. Looked up only when an alarm is actually
+      // being raised, not on every message.
+      const alarmProduct = product ?? (await latestProduct(machine, runId));
       await prisma.alarm.create({
         data: {
           ruleKey: verdict.ruleKey,
           severity: verdict.severity,
           machine,
-          product,
+          product: alarmProduct,
           runId: runId === undefined ? null : BigInt(runId),
           title: verdict.title,
           detail: verdict.detail ?? null,
@@ -124,7 +154,7 @@ async function reconcileAlarms(
         await notifyDiscord({
           severity: verdict.severity,
           machine,
-          product,
+          product: alarmProduct,
           title: verdict.title,
           detail: verdict.detail ?? null,
         });

@@ -6,6 +6,7 @@ export type OeeEvent = {
   // null when the machine reports outside a production run.
   run_id: number | null;
   machine: string;
+  product?: string | null;
   event: string;
   detail: string | null;
   state?: { gear?: string; conveyor?: string; output?: string };
@@ -84,7 +85,7 @@ export function evaluateSummaryRules(summary: OeeSummary): RuleVerdict[] {
     verdicts.push({
       ruleKey: "defect_spike",
       severity: "WARNING",
-      title: "Defect rate above limit",
+      title: `Defect rate above ${DEFECT_RATE_THRESHOLD * 100}`,
       active: rate >= DEFECT_RATE_THRESHOLD,
       detail: `${(rate * 100).toFixed(1)}% (${defect}/${total}), limit ${DEFECT_RATE_THRESHOLD * 100}%`,
     });
@@ -94,7 +95,7 @@ export function evaluateSummaryRules(summary: OeeSummary): RuleVerdict[] {
     verdicts.push({
       ruleKey: "oee_out_of_range",
       severity: "WARNING",
-      title: "OEE out of range",
+      title: `OEE below ${OEE_THRESHOLD}`,
       active: oee < OEE_THRESHOLD,
       detail: `oee=${oee.toFixed(1)}, threshold ${OEE_THRESHOLD}`,
     });
