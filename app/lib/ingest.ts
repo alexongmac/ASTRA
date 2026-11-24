@@ -10,12 +10,19 @@ import {
   type RuleVerdict,
 } from "@/lib/alarm-rules";
 
+// The machine reports run_id: null when no production run is active. The
+// machine_events and oee_summaries tables declare run_id NOT NULL, so such a
+// row cannot be stored - and BigInt(null) used to throw, which sent the message
+// to the dead-letter queue after three tries and, for a gear_down event,
+// dropped the alarm entirely. Alarms accept a null run, so the rules are still
+// evaluated; only the raw row is skipped.
 export async function processMessage(payload: unknown): Promise<void> {
   if (isSummaryPayload(payload)) {
-    await storeSummary(payload);
+    const runId = payload.run_id ?? undefined;
+    if (runId !== undefined) await storeSummary(payload, runId);
     await reconcileAlarms(
       payload.machine,
-      payload.run_id,
+      runId,
       payload.product ?? null,
       evaluateSummaryRules(payload),
     );
@@ -23,10 +30,11 @@ export async function processMessage(payload: unknown): Promise<void> {
   }
 
   if (isEventPayload(payload)) {
-    await storeEvent(payload);
+    const runId = payload.run_id ?? undefined;
+    if (runId !== undefined) await storeEvent(payload, runId);
     await reconcileAlarms(
       payload.machine,
-      payload.run_id,
+      runId,
       null,
       evaluateEventRules(payload),
     );
@@ -38,12 +46,12 @@ export async function processMessage(payload: unknown): Promise<void> {
   );
 }
 
-async function storeEvent(event: OeeEvent) {
+async function storeEvent(event: OeeEvent, runId: number) {
   await prisma.machineEvent.create({
     data: {
       v: event.v,
       ts: new Date(event.ts),
-      runId: BigInt(event.run_id),
+      runId: BigInt(runId),
       machine: event.machine,
       event: event.event,
       detail: event.detail ?? null,
@@ -55,12 +63,12 @@ async function storeEvent(event: OeeEvent) {
   });
 }
 
-async function storeSummary(summary: OeeSummary) {
+async function storeSummary(summary: OeeSummary, runId: number) {
   await prisma.oeeSummary.create({
     data: {
       v: summary.v,
       ts: new Date(summary.ts),
-      runId: BigInt(summary.run_id),
+      runId: BigInt(runId),
       machine: summary.machine,
       product: summary.product ?? null,
       availability: summary.availability ?? null,

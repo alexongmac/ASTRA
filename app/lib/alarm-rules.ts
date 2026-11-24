@@ -3,7 +3,8 @@ export type AlarmSeverity = "CRITICAL" | "WARNING" | "INFO";
 export type OeeEvent = {
   v: number;
   ts: string;
-  run_id: number;
+  // null when the machine reports outside a production run.
+  run_id: number | null;
   machine: string;
   event: string;
   detail: string | null;
@@ -14,7 +15,8 @@ export type OeeEvent = {
 export type OeeSummary = {
   v: number;
   ts: string;
-  run_id: number;
+  // null when the machine reports outside a production run.
+  run_id: number | null;
   machine: string;
   product?: string;
   availability?: number;
