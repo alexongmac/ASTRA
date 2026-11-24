@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useSyncExternalStore, useTransition } from "react";
+import { useLayoutEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { LOG_CATEGORIES, LOG_PRIORITIES, LOG_STATUSES, MAX_MESSAGE } from "@/lib/operator-logs";
 
 export type LogFormValues = {
@@ -52,6 +52,22 @@ export function LogForm({
   const [priority, setPriority] = useState(initial?.priority ?? "");
   const [status, setStatus] = useState(initial?.status ?? "");
   const [message, setMessage] = useState(initial?.message ?? "");
+
+  // Cache Components keeps a navigated-away page mounted (hidden) so its state
+  // survives, which brought back the previous entry's text on the next "New
+  // Entry". The cleanup runs when the page is hidden or unmounted, so the form
+  // starts from its initial values the next time it is shown.
+  useLayoutEffect(() => {
+    return () => {
+      setTypedTime(null);
+      setArea(initial?.area ?? "");
+      setCategory(initial?.category ?? "");
+      setPriority(initial?.priority ?? "");
+      setStatus(initial?.status ?? "");
+      setMessage(initial?.message ?? "");
+      setError(null);
+    };
+  }, [initial]);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
