@@ -86,10 +86,10 @@ export default async function DashboardPage({
             <thead className="text-blue-400">
               <tr>
                 <Th />
-                <Th>Event Time</Th>
-                <Th>Area</Th>
-                <Th>Category</Th>
-                <Th>Message</Th>
+                <Th className="whitespace-nowrap">Event Time</Th>
+                <Th className="whitespace-nowrap">Area</Th>
+                <Th className="whitespace-nowrap">Category</Th>
+                <Th className="w-full">Message</Th>
                 <Th>Status</Th>
               </tr>
             </thead>
@@ -111,10 +111,10 @@ export default async function DashboardPage({
                       </Link>
                     </div>
                   </Td>
-                  <Td><Time value={log.eventTime} /></Td>
-                  <Td>{log.area}</Td>
-                  <Td>{log.category}</Td>
-                  <Td className="whitespace-pre-wrap">{log.message}</Td>
+                  <Td className="whitespace-nowrap"><Time value={log.eventTime} /></Td>
+                  <Td className="whitespace-nowrap">{log.area}</Td>
+                  <Td className="whitespace-nowrap">{log.category}</Td>
+                  <Td className="w-full whitespace-pre-wrap">{log.message}</Td>
                   <Td className={log.status === "Open" ? "text-amber-300" : "text-slate-400"}>{log.status}</Td>
                 </tr>
               ))}
@@ -218,8 +218,8 @@ function Tab({ href, label, active }: { href: string; label: string; active: boo
   );
 }
 
-function Th({ children }: { children?: React.ReactNode }) {
-  return <th className="pb-2 pr-4 font-medium">{children}</th>;
+function Th({ children, className = "" }: { children?: React.ReactNode; className?: string }) {
+  return <th className={`pb-2 pr-4 font-medium ${className}`}>{children}</th>;
 }
 
 function Td({ children, className = "" }: { children?: React.ReactNode; className?: string }) {

@@ -47,10 +47,10 @@ export function LogForm({
   const [typedTime, setTypedTime] = useState<string | null>(null);
   const eventTime =
     typedTime ?? (mounted ? toLocalInput(initial ? new Date(initial.eventTime) : new Date()) : "");
-  const [area, setArea] = useState(initial?.area ?? areas[0] ?? "");
-  const [category, setCategory] = useState(initial?.category ?? LOG_CATEGORIES[0]);
+  const [area, setArea] = useState(initial?.area ?? "");
+  const [category, setCategory] = useState(initial?.category ?? "");
   const [priority, setPriority] = useState(initial?.priority ?? "");
-  const [status, setStatus] = useState(initial?.status ?? LOG_STATUSES[0]);
+  const [status, setStatus] = useState(initial?.status ?? "");
   const [message, setMessage] = useState(initial?.message ?? "");
 
   const submit = (event: React.FormEvent) => {
@@ -97,12 +97,14 @@ export function LogForm({
           <input id="eventTime" type="datetime-local" required value={eventTime} onChange={(e) => setTypedTime(e.target.value)} className={FIELD} />
 
           <label htmlFor="status">Status</label>
-          <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className={FIELD}>
+          <select id="status" required value={status} onChange={(e) => setStatus(e.target.value)} className={FIELD}>
+            <option value="">-</option>
             {LOG_STATUSES.map((s) => <option key={s}>{s}</option>)}
           </select>
 
           <label htmlFor="category">Category</label>
-          <select id="category" value={category} onChange={(e) => setCategory(e.target.value)} className={FIELD}>
+          <select id="category" required value={category} onChange={(e) => setCategory(e.target.value)} className={FIELD}>
+            <option value="">-</option>
             {LOG_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
           </select>
 
@@ -113,8 +115,9 @@ export function LogForm({
           </select>
 
           <label htmlFor="area">Area</label>
-          <select id="area" value={area} onChange={(e) => setArea(e.target.value)} className={FIELD}>
-            {(areas.includes(area) ? areas : [area, ...areas]).map((a) => <option key={a}>{a}</option>)}
+          <select id="area" required value={area} onChange={(e) => setArea(e.target.value)} className={FIELD}>
+            <option value="">-</option>
+            {(!area || areas.includes(area) ? areas : [area, ...areas]).map((a) => <option key={a}>{a}</option>)}
           </select>
         </div>
 
