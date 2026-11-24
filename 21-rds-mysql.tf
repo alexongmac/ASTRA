@@ -158,6 +158,18 @@ resource "aws_db_instance" "mysql" {
   db_subnet_group_name          = aws_db_subnet_group.rds.name
   vpc_security_group_ids        = [aws_security_group.rds.id]
   skip_final_snapshot           = true
+  # Automated daily backups plus point-in-time restore. 0 (the default when
+  # unset on a new instance here) means NO backups: the database held the only
+  # copy of operators, alarms and OEE history with nothing but a hand-taken
+  # snapshot behind it. 7 days is the cheapest useful window; backup storage up
+  # to the size of the database (20 GB) is free.
+  backup_retention_period = 7
+  # Refuses DeleteDBInstance (console, CLI, or a Terraform destroy/replace)
+  # until switched off first, so one mistyped command cannot remove the only
+  # copy of the data - and its automated backups with it, since
+  # skip_final_snapshot above leaves no final snapshot behind. To tear the
+  # environment down deliberately, set this to false and apply BEFORE destroy.
+  deletion_protection = true
   # Without this, network/identifier changes queue for the next maintenance
   # window instead of applying now - Terraform's plan then can't actually
   # detach the old security group's RDS-owned ENI, and the dependent
