@@ -513,3 +513,16 @@ until kubectl --context "$C" -n kube-system get pods 2>/dev/null | grep cluster-
 kubectl --context "$C" -n kube-system get pods | grep cluster-autoscaler
 sleep 20
 kubectl --context "$C" -n kube-system logs deploy/cluster-autoscaler-aws-cluster-autoscaler --tail=200 2>&1 | grep -Ei 'AccessDenied|Failed|static_autoscaler|node group|Scale-down' | tail -8
+
+### repair argocd
+
+C=arn:aws:eks:us-east-1:255945442255:cluster/astra-eks-development-cluster
+kubectl --context "$C" -n monitoring patch deploy kube-prometheus-stack-grafana --type merge -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}' 2>&1
+kubectl --context "$C" -n argocd patch app kube-prometheus-stack --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}' 2>&1
+for i in $(seq 1 24); do
+  sleep 10
+  S=$(kubectl --context "$C" -n argocd get app kube-prometheus-stack -o jsonpath='{.status.sync.status}/{.status.health.status}')
+  P=$(kubectl --context "$C" -n monitoring get pods --no-headers | grep grafana)
+  echo "$S | $P"
+  [ "$S" = "Synced/Healthy" ] && echo "$P" | grep -q '3/3' && ! echo "$P" | grep -q '4h' && break
+done

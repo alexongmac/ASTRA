@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AcknowledgeButton } from "./acknowledge-button";
 import { AutoRefresh } from "./auto-refresh";
+import { DeleteLogButton } from "./delete-log-button";
+import { Header } from "./header";
 import { LocalTime } from "./local-time";
 
 // Session + live alarm data are request-time reads, so this route blocks.
@@ -40,8 +42,9 @@ export default async function DashboardPage({
 
   const { tab } = await searchParams;
   const showHistory = tab === "history";
+  const showLogs = tab === "logs";
 
-  const [active, history] = await Promise.all([
+  const [active, history, logs] = await Promise.all([
     prisma.alarm.findMany({
       where: { status: { in: ["raised", "acknowledged"] } },
       orderBy: { raisedAt: "desc" },
@@ -53,34 +56,73 @@ export default async function DashboardPage({
           include: { acknowledgedBy: true },
         })
       : Promise.resolve([]),
+    showLogs
+      ? prisma.operatorLog.findMany({ orderBy: { eventTime: "desc" }, take: 200 })
+      : Promise.resolve([]),
   ]);
-
-  async function logout() {
-    "use server";
-    await signOut({ redirectTo: "/login" });
-  }
 
   return (
     <main className="min-h-screen bg-slate-900 px-6 py-5">
       <AutoRefresh />
-      <header className="flex items-center justify-between">
-        <h1 className="text-sm font-semibold text-white">R2D2 · Operation Excellence</h1>
-        <div className="flex items-center gap-3 text-xs text-slate-300">
-          <span>Signed in as {session.user.name}</span>
-          <form action={logout}>
-            <button className="rounded border border-slate-600 bg-slate-800 px-3 py-1.5 hover:bg-slate-700">
-              Log out
-            </button>
-          </form>
-        </div>
-      </header>
+      <Header userName={session.user.name} />
 
       <nav className="mt-5 flex gap-2">
-        <Tab href="/" label={`Active alarms (${active.length})`} active={!showHistory} />
+        <Tab href="/" label={`Active alarms (${active.length})`} active={!showHistory && !showLogs} />
         <Tab href="/?tab=history" label="Alarm History" active={showHistory} />
+        <Tab href="/?tab=logs" label="Operator logs" active={showLogs} />
       </nav>
 
-      {showHistory ? (
+      {showLogs ? (
+        <section className="mt-4 rounded-lg border border-slate-700 bg-slate-800 p-4 shadow-sm">
+          <div className="mb-3">
+            <Link
+              href="/operator-logs/new"
+              className="inline-flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              <span aria-hidden="true">+</span> New Entry
+            </Link>
+          </div>
+          <table className="w-full text-left text-xs">
+            <thead className="text-blue-400">
+              <tr>
+                <Th />
+                <Th>Event Time</Th>
+                <Th>Area</Th>
+                <Th>Category</Th>
+                <Th>Message</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log) => (
+                <tr key={String(log.id)} className="border-t border-slate-700">
+                  <Td>
+                    <div className="flex items-center gap-2">
+                      <DeleteLogButton logId={String(log.id)} />
+                      <Link
+                        href={`/operator-logs/${log.id}/edit`}
+                        title="Edit"
+                        aria-label="Edit log entry"
+                        className="text-slate-300 hover:text-amber-300"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </Link>
+                    </div>
+                  </Td>
+                  <Td><Time value={log.eventTime} /></Td>
+                  <Td>{log.area}</Td>
+                  <Td>{log.category}</Td>
+                  <Td className="whitespace-pre-wrap">{log.message}</Td>
+                  <Td className={log.status === "Open" ? "text-amber-300" : "text-slate-400"}>{log.status}</Td>
+                </tr>
+              ))}
+              {logs.length === 0 ? <EmptyRow colSpan={6} label="No log entries yet." /> : null}
+            </tbody>
+          </table>
+        </section>
+      ) : showHistory ? (
         <section className="mt-4 rounded-lg border border-slate-700 bg-slate-800 p-4 shadow-sm">
           <p className="mb-3 text-xs text-slate-500">
             Acknowledged. Sending to the machine will retry automatically.
