@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/auth";
-import { loadAreas } from "@/lib/areas";
+import { DEFAULT_AREAS } from "@/lib/operator-logs";
 import { prisma } from "@/lib/prisma";
 import { Header } from "../../../header";
 import { LogForm } from "../../../log-form";
@@ -24,7 +24,7 @@ export default async function EditLogPage({ params }: { params: Promise<{ id: st
       <h2 className="mt-5 text-sm font-semibold text-white">Edit Entry</h2>
       <LogForm
         logId={id}
-        areas={await loadAreas()}
+        areas={[...DEFAULT_AREAS]}
         initial={{
           eventTime: log.eventTime.toISOString(),
           area: log.area,

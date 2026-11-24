@@ -57,7 +57,11 @@ export default async function DashboardPage({
         })
       : Promise.resolve([]),
     showLogs
-      ? prisma.operatorLog.findMany({ orderBy: { eventTime: "desc" }, take: 200 })
+      ? prisma.operatorLog.findMany({
+          orderBy: { eventTime: "desc" },
+          take: 200,
+          include: { createdBy: true },
+        })
       : Promise.resolve([]),
   ]);
 
@@ -89,6 +93,8 @@ export default async function DashboardPage({
                 <Th className="whitespace-nowrap">Event Time</Th>
                 <Th className="whitespace-nowrap">Area</Th>
                 <Th className="whitespace-nowrap">Category</Th>
+                <Th className="whitespace-nowrap">Priority</Th>
+                <Th className="whitespace-nowrap">Author</Th>
                 <Th className="w-full">Message</Th>
                 <Th>Status</Th>
               </tr>
@@ -114,11 +120,13 @@ export default async function DashboardPage({
                   <Td className="whitespace-nowrap"><Time value={log.eventTime} /></Td>
                   <Td className="whitespace-nowrap">{log.area}</Td>
                   <Td className="whitespace-nowrap">{log.category}</Td>
+                  <Td className="whitespace-nowrap">{log.priority ?? "—"}</Td>
+                  <Td className="whitespace-nowrap">{log.createdBy?.displayName ?? "—"}</Td>
                   <Td className="w-full whitespace-pre-wrap">{log.message}</Td>
                   <Td className={log.status === "Open" ? "text-amber-300" : "text-slate-400"}>{log.status}</Td>
                 </tr>
               ))}
-              {logs.length === 0 ? <EmptyRow colSpan={6} label="No log entries yet." /> : null}
+              {logs.length === 0 ? <EmptyRow colSpan={8} label="No log entries yet." /> : null}
             </tbody>
           </table>
         </section>

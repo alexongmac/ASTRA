@@ -446,6 +446,22 @@ kubectl patch application <applications> -n argocd --type merge -p '{"spec":{"sy
 kubectl apply -f <manifest file>.yaml
 kubectl patch application <applications> -n argocd --type merge -p '{"operation":{"sync":{}}}'
 
+### Web Applications after CI/CD
+
+Make ArgoCD pick it up. Only needed if it still shows the old tag:
+
+kubectl -n argocd annotate app web-app-development argocd.argoproj.io/refresh=hard --overwrite
+
+Watch rollout
+
+kubectl config current-context # must be astra-eks-development-cluster
+kubectl -n web-app rollout status deploy/astra-web-app
+kubectl -n web-app get pods
+
+Restart without a new image. This only helps if the tag didn't change, and it won't pick up code changes:
+
+kubectl -n web-app rollout restart deploy/astra-web-app
+
 ### ArgoCD OutofSync
 
 kubectl config current-context

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/auth";
-import { loadAreas } from "@/lib/areas";
+import { DEFAULT_AREAS } from "@/lib/operator-logs";
 import { Header } from "../../header";
 import { LogForm } from "../../log-form";
 
@@ -16,7 +16,7 @@ export default async function NewLogPage() {
     <main className="min-h-screen bg-slate-900 px-6 py-5">
       <Header userName={session.user.name} />
       <h2 className="mt-5 text-sm font-semibold text-white">New Entry</h2>
-      <LogForm areas={await loadAreas()} />
+      <LogForm areas={[...DEFAULT_AREAS]} />
     </main>
   );
 }
