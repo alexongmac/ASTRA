@@ -20,6 +20,7 @@ export async function processMessage(payload: unknown): Promise<void> {
   if (isSummaryPayload(payload)) {
     const runId = payload.run_id ?? undefined;
     if (runId !== undefined) await storeSummary(payload, runId);
+    if (payload.product) await backfillProduct(payload.machine, runId, payload.product);
     await reconcileAlarms(
       payload.machine,
       runId,
@@ -111,6 +112,36 @@ async function latestProduct(
   } catch (error) {
     console.error("Product lookup failed:", (error as Error).message);
     return null;
+  }
+}
+
+// An alarm raised before a run starts (typically at machine start-up) has no
+// product: the event carries none and the machine has no earlier summary to look
+// one up from. The first summary of the run does know it, so fill it into any
+// alarm still open for that machine without one. Only alarms with no run, or
+// from this same run, are touched - an open alarm from a different run is left
+// alone. Alarms that already cleared before the first summary stay blank.
+// Never throws: a failed backfill must not stop the summary being processed.
+async function backfillProduct(
+  machine: string,
+  runId: number | undefined,
+  product: string,
+) {
+  try {
+    await prisma.alarm.updateMany({
+      where: {
+        machine,
+        product: null,
+        status: { in: ["raised", "acknowledged"] },
+        OR: [
+          { runId: null },
+          ...(runId !== undefined ? [{ runId: BigInt(runId) }] : []),
+        ],
+      },
+      data: { product },
+    });
+  } catch (error) {
+    console.error("Product backfill failed:", (error as Error).message);
   }
 }
 

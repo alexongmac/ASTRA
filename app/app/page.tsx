@@ -5,6 +5,7 @@ import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AcknowledgeButton } from "./acknowledge-button";
 import { AutoRefresh } from "./auto-refresh";
+import { LocalTime } from "./local-time";
 
 // Session + live alarm data are request-time reads, so this route blocks.
 export const instant = false;
@@ -23,10 +24,9 @@ const STATUS_STYLES: Record<string, string> = {
   cleared: "text-slate-400",
 };
 
-const formatTime = (value: Date | null) =>
-  value
-    ? value.toLocaleString("en-US", { dateStyle: "short", timeStyle: "medium" })
-    : "";
+// Renders in the viewer's own time zone; the server's zone is UTC.
+const Time = ({ value }: { value: Date | null }) =>
+  value ? <LocalTime iso={value.toISOString()} /> : null;
 
 export default async function DashboardPage({
   searchParams,
@@ -101,18 +101,20 @@ export default async function DashboardPage({
             <tbody>
               {history.map((alarm) => (
                 <tr key={String(alarm.id)} className="border-t border-slate-700">
-                  <Td>{formatTime(alarm.raisedAt)}</Td>
+                  <Td><Time value={alarm.raisedAt} /></Td>
                   <Td>{alarm.machine}</Td>
                   <Td>{alarm.product ?? "—"}</Td>
                   <Td>{alarm.title}</Td>
                   <Td className={`font-semibold ${SEVERITY_STYLES[alarm.severity]}`}>{alarm.severity}</Td>
                   <Td className={STATUS_STYLES[alarm.status]}>{alarm.status}</Td>
                   <Td>
-                    {alarm.acknowledgedAt
-                      ? `${alarm.acknowledgedBy?.displayName ?? "unknown"} · ${formatTime(alarm.acknowledgedAt)}`
-                      : ""}
+                    {alarm.acknowledgedAt ? (
+                      <>
+                        {alarm.acknowledgedBy?.displayName ?? "unknown"} · <Time value={alarm.acknowledgedAt} />
+                      </>
+                    ) : null}
                   </Td>
-                  <Td>{formatTime(alarm.clearedAt)}</Td>
+                  <Td><Time value={alarm.clearedAt} /></Td>
                 </tr>
               ))}
               {history.length === 0 ? <EmptyRow colSpan={8} label="No alarms recorded yet." /> : null}
@@ -143,7 +145,7 @@ export default async function DashboardPage({
                     <div>{alarm.title}</div>
                     <div className="text-slate-500">{alarm.ruleKey}</div>
                   </Td>
-                  <Td>{formatTime(alarm.raisedAt)}</Td>
+                  <Td><Time value={alarm.raisedAt} /></Td>
                   <Td className={STATUS_STYLES[alarm.status]}>{alarm.status}</Td>
                   <Td>
                     {alarm.status === "raised" ? <AcknowledgeButton alarmId={String(alarm.id)} /> : null}
