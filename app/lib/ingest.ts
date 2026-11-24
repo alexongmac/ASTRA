@@ -1,3 +1,4 @@
+import { notifyDiscord } from "@/lib/discord";
 import { prisma } from "@/lib/prisma";
 import {
   evaluateEventRules,
@@ -12,17 +13,29 @@ import {
 export async function processMessage(payload: unknown): Promise<void> {
   if (isSummaryPayload(payload)) {
     await storeSummary(payload);
-    await reconcileAlarms(payload.machine, payload.run_id, payload.product ?? null, evaluateSummaryRules(payload));
+    await reconcileAlarms(
+      payload.machine,
+      payload.run_id,
+      payload.product ?? null,
+      evaluateSummaryRules(payload),
+    );
     return;
   }
 
   if (isEventPayload(payload)) {
     await storeEvent(payload);
-    await reconcileAlarms(payload.machine, payload.run_id, null, evaluateEventRules(payload));
+    await reconcileAlarms(
+      payload.machine,
+      payload.run_id,
+      null,
+      evaluateEventRules(payload),
+    );
     return;
   }
 
-  throw new Error(`Unrecognised payload shape: ${JSON.stringify(payload).slice(0, 200)}`);
+  throw new Error(
+    `Unrecognised payload shape: ${JSON.stringify(payload).slice(0, 200)}`,
+  );
 }
 
 async function storeEvent(event: OeeEvent) {
@@ -77,7 +90,11 @@ async function reconcileAlarms(
 ) {
   for (const verdict of verdicts) {
     const open = await prisma.alarm.findFirst({
-      where: { machine, ruleKey: verdict.ruleKey, status: { in: ["raised", "acknowledged"] } },
+      where: {
+        machine,
+        ruleKey: verdict.ruleKey,
+        status: { in: ["raised", "acknowledged"] },
+      },
       orderBy: { raisedAt: "desc" },
     });
 
@@ -93,6 +110,17 @@ async function reconcileAlarms(
           detail: verdict.detail ?? null,
         },
       });
+      // Only CRITICAL alarms post to Discord. notifyDiscord never throws, so a
+      // failed notification cannot stop the alarm from being stored.
+      if (verdict.severity === "CRITICAL") {
+        await notifyDiscord({
+          severity: verdict.severity,
+          machine,
+          product,
+          title: verdict.title,
+          detail: verdict.detail ?? null,
+        });
+      }
     } else if (!verdict.active && open) {
       await prisma.alarm.update({
         where: { id: open.id },
