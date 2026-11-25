@@ -17,6 +17,8 @@ export default async function EditLogPage({ params }: { params: Promise<{ id: st
   if (!/^\d+$/.test(id)) notFound();
   const log = await prisma.operatorLog.findUnique({ where: { id: BigInt(id) } });
   if (!log) notFound();
+  // Closed entries are final; send direct visits back to the list.
+  if (log.status === "Closed") redirect("/?tab=logs");
 
   return (
     <main className="min-h-screen bg-slate-900 px-6 py-5">

@@ -7,6 +7,7 @@ import { AcknowledgeButton } from "./acknowledge-button";
 import { AutoRefresh } from "./auto-refresh";
 import { DeleteLogButton } from "./delete-log-button";
 import { Header } from "./header";
+import { MessageCell } from "./message-cell";
 import { LocalTime } from "./local-time";
 
 // Session + live alarm data are request-time reads, so this route blocks.
@@ -118,19 +119,34 @@ export default async function DashboardPage({
               {logs.map((log) => (
                 <tr key={String(log.id)} className="border-t border-slate-700">
                   <Td>
-                    <div className="flex items-center gap-2">
-                      <DeleteLogButton logId={String(log.id)} />
-                      <Link
-                        href={`/operator-logs/${log.id}/edit`}
-                        title="Edit"
-                        aria-label="Edit log entry"
-                        className="text-slate-300 hover:text-amber-300"
+                    {log.status === "Closed" ? (
+                      // Closed entries are final: both actions are switched off.
+                      <div
+                        className="flex items-center gap-2 text-slate-600"
+                        title="Closed entries cannot be edited or deleted"
                       >
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
+                        </svg>
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
                         </svg>
-                      </Link>
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <DeleteLogButton logId={String(log.id)} />
+                        <Link
+                          href={`/operator-logs/${log.id}/edit`}
+                          title="Edit"
+                          aria-label="Edit log entry"
+                          className="text-slate-300 hover:text-amber-300"
+                        >
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </Link>
+                      </div>
+                    )}
                   </Td>
                   <Td className="whitespace-nowrap"><Time value={log.eventTime} /></Td>
                   <Td className="whitespace-nowrap">{log.area}</Td>
@@ -138,7 +154,20 @@ export default async function DashboardPage({
                   <Td className="whitespace-nowrap">{log.category}</Td>
                   <Td className={`whitespace-nowrap font-semibold ${LOG_PRIORITY_STYLES[log.priority ?? ""] ?? "text-slate-100"}`}>{log.priority ?? "—"}</Td>
                   <Td className="whitespace-nowrap">{log.createdBy?.displayName ?? "—"}</Td>
-                  <Td className="w-full whitespace-pre-wrap">{log.message}</Td>
+                  <Td className="w-full max-w-0">
+                    <MessageCell
+                      log={{
+                        eventTime: log.eventTime.toISOString(),
+                        area: log.area,
+                        machine: log.machine,
+                        category: log.category,
+                        priority: log.priority,
+                        status: log.status,
+                        author: log.createdBy?.displayName ?? null,
+                        message: log.message,
+                      }}
+                    />
+                  </Td>
                   <Td className={`w-[100px] min-w-[100px] ${LOG_STATUS_STYLES[log.status] ?? "text-slate-400"}`}>{log.status}</Td>
                 </tr>
               ))}

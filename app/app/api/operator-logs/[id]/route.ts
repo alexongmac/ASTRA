@@ -22,6 +22,9 @@ export async function PUT(request: Request, { params }: Ctx) {
 
   const existing = await prisma.operatorLog.findUnique({ where: { id: logId } });
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
+  if (existing.status === "Closed") {
+    return Response.json({ error: "Closed entries cannot be edited" }, { status: 409 });
+  }
 
   await prisma.operatorLog.update({ where: { id: logId }, data: parsed.data });
   return Response.json({ status: "updated" });
@@ -36,7 +39,12 @@ export async function DELETE(_request: Request, { params }: Ctx) {
   const logId = parseId((await params).id);
   if (logId === null) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const { count } = await prisma.operatorLog.deleteMany({ where: { id: logId } });
-  if (count === 0) return Response.json({ error: "Not found" }, { status: 404 });
+  const existing = await prisma.operatorLog.findUnique({ where: { id: logId } });
+  if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
+  if (existing.status === "Closed") {
+    return Response.json({ error: "Closed entries cannot be deleted" }, { status: 409 });
+  }
+
+  await prisma.operatorLog.deleteMany({ where: { id: logId } });
   return Response.json({ status: "deleted" });
 }
