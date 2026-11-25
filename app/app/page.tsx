@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/auth";
+import { isLocked } from "@/lib/operator-logs";
 import { prisma } from "@/lib/prisma";
 import { AcknowledgeButton } from "./acknowledge-button";
 import { AutoRefresh } from "./auto-refresh";
@@ -119,11 +120,11 @@ export default async function DashboardPage({
               {logs.map((log) => (
                 <tr key={String(log.id)} className="border-t border-slate-700">
                   <Td>
-                    {log.status === "Closed" ? (
-                      // Closed entries are final: both actions are switched off.
+                    {isLocked(log.status) ? (
+                      // Closed and Cancelled entries are final: both actions are switched off.
                       <div
                         className="flex items-center gap-2 text-slate-600"
-                        title="Closed entries cannot be edited or deleted"
+                        title={`${log.status} entries cannot be edited or deleted`}
                       >
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/auth";
 import { DEFAULT_AREAS } from "@/lib/operator-logs";
+import { isLocked } from "@/lib/operator-logs";
 import { prisma } from "@/lib/prisma";
 import { Header } from "../../../header";
 import { LogForm } from "../../../log-form";
@@ -17,8 +18,8 @@ export default async function EditLogPage({ params }: { params: Promise<{ id: st
   if (!/^\d+$/.test(id)) notFound();
   const log = await prisma.operatorLog.findUnique({ where: { id: BigInt(id) } });
   if (!log) notFound();
-  // Closed entries are final; send direct visits back to the list.
-  if (log.status === "Closed") redirect("/?tab=logs");
+  // Closed and Cancelled entries are final; send direct visits back to the list.
+  if (isLocked(log.status)) redirect("/?tab=logs");
 
   return (
     <main className="min-h-screen bg-slate-900 px-6 py-5">

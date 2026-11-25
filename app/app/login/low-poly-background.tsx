@@ -24,6 +24,9 @@ type Facet = {
   shimmer: boolean;
   duration: string;
   delay: string;
+  // Negative animation delay for the travelling light wave, derived from the
+  // facet's position so the brightness ripples across the mesh.
+  wave: string;
 };
 
 function buildFacets(): Facet[] {
@@ -53,12 +56,16 @@ function buildFacets(): Facet[] {
     // fill opacity is read before the shimmer roll, exactly as in the original.
     const fillOpacity = (0.02 + rand() * 0.2).toFixed(2);
     const shimmer = rand() > 0.86;
+    const cx = (a[0] + b[0] + c[0]) / 3;
+    const cy = (a[1] + b[1] + c[1]) / 3;
+    const phase = (cx / VIEW_W) * 6 + (cy / VIEW_H) * 2;
     facets.push({
       points,
       fillOpacity,
       shimmer,
       duration: `${(4 + rand() * 4).toFixed(1)}s`,
       delay: `${(rand() * 4).toFixed(1)}s`,
+      wave: `${(phase - 9).toFixed(2)}s`,
     });
   };
 
@@ -85,6 +92,7 @@ export function LowPolyBackground() {
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="xMinYMid slice"
       >
+        <g className="drift">
         {FACETS.map((f, i) => (
           <polygon
             key={i}
@@ -94,17 +102,18 @@ export function LowPolyBackground() {
             stroke="currentColor"
             strokeOpacity={0.16}
             strokeWidth={1}
-            className={f.shimmer ? "shimmer" : undefined}
+            className={f.shimmer ? "shimmer" : "wave"}
             style={
               f.shimmer
                 ? ({
                     "--d": f.duration,
                     animationDelay: f.delay,
                   } as React.CSSProperties)
-                : undefined
+                : { animationDelay: f.wave }
             }
           />
         ))}
+        </g>
       </svg>
     </div>
   );

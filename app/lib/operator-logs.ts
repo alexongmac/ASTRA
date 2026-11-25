@@ -6,6 +6,10 @@ export const LOG_CATEGORIES = [
   "Other",
 ] as const;
 export const LOG_STATUSES = ["Open", "Closed", "On-Hold", "Cancelled"] as const;
+// Entries in these statuses are final: they can be viewed but not edited or deleted.
+export const LOCKED_STATUSES: readonly string[] = ["Closed", "Cancelled"];
+export const isLocked = (status: string) => LOCKED_STATUSES.includes(status);
+
 export const LOG_PRIORITIES = ["Low", "Medium", "High"] as const;
 
 // The Area dropdown options. Edit this list to add or rename an area.

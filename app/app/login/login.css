@@ -55,8 +55,44 @@
   animation: login-shimmer var(--d, 6s) ease-in-out infinite;
 }
 
+/* A slow brightness wave that ripples across every facet. Each facet's delay
+   comes from its position (see low-poly-background.tsx), so it reads as light
+   moving over the mesh rather than random blinking. */
+@keyframes login-wave {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.login-bg .wave {
+  animation: login-wave 9s ease-in-out infinite;
+}
+
+/* The whole mesh drifts slowly back and forth. The mesh is generated larger
+   than the view, so the edges never show a gap. */
+@keyframes login-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-14px, 10px, 0) scale(1.04);
+  }
+}
+
+.login-bg .drift {
+  animation: login-drift 26s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .login-bg .shimmer {
+  .login-bg .shimmer,
+  .login-bg .wave,
+  .login-bg .drift {
     animation: none;
   }
 }

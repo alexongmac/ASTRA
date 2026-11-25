@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { parseLogInput } from "@/lib/operator-logs";
+import { isLocked, parseLogInput } from "@/lib/operator-logs";
 import { prisma } from "@/lib/prisma";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -22,8 +22,8 @@ export async function PUT(request: Request, { params }: Ctx) {
 
   const existing = await prisma.operatorLog.findUnique({ where: { id: logId } });
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
-  if (existing.status === "Closed") {
-    return Response.json({ error: "Closed entries cannot be edited" }, { status: 409 });
+  if (isLocked(existing.status)) {
+    return Response.json({ error: `${existing.status} entries cannot be edited` }, { status: 409 });
   }
 
   await prisma.operatorLog.update({ where: { id: logId }, data: parsed.data });
@@ -41,8 +41,8 @@ export async function DELETE(_request: Request, { params }: Ctx) {
 
   const existing = await prisma.operatorLog.findUnique({ where: { id: logId } });
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
-  if (existing.status === "Closed") {
-    return Response.json({ error: "Closed entries cannot be deleted" }, { status: 409 });
+  if (isLocked(existing.status)) {
+    return Response.json({ error: `${existing.status} entries cannot be deleted` }, { status: 409 });
   }
 
   await prisma.operatorLog.deleteMany({ where: { id: logId } });
