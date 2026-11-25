@@ -96,7 +96,7 @@ export default async function DashboardPage({
                 <Th className="whitespace-nowrap">Priority</Th>
                 <Th className="whitespace-nowrap">Author</Th>
                 <Th className="w-full">Message</Th>
-                <Th>Status</Th>
+                <Th className="w-[100px] min-w-[100px]">Status</Th>
               </tr>
             </thead>
             <tbody>
@@ -123,7 +123,7 @@ export default async function DashboardPage({
                   <Td className="whitespace-nowrap">{log.priority ?? "—"}</Td>
                   <Td className="whitespace-nowrap">{log.createdBy?.displayName ?? "—"}</Td>
                   <Td className="w-full whitespace-pre-wrap">{log.message}</Td>
-                  <Td className={log.status === "Open" ? "text-amber-300" : "text-slate-400"}>{log.status}</Td>
+                  <Td className={`w-[100px] min-w-[100px] ${log.status === "Open" ? "text-amber-300" : "text-slate-400"}`}>{log.status}</Td>
                 </tr>
               ))}
               {logs.length === 0 ? <EmptyRow colSpan={8} label="No log entries yet." /> : null}
