@@ -26,6 +26,20 @@ const STATUS_STYLES: Record<string, string> = {
   cleared: "text-slate-400",
 };
 
+// Operator log colours. Full class names (not built strings) so Tailwind sees them.
+const LOG_PRIORITY_STYLES: Record<string, string> = {
+  High: "text-red-500",
+  Medium: "text-orange-400",
+  Low: "text-green-400",
+};
+
+const LOG_STATUS_STYLES: Record<string, string> = {
+  Open: "text-amber-300",
+  Closed: "text-green-400",
+  "On-Hold": "text-sky-400",
+  Cancelled: "text-slate-400",
+};
+
 // Renders in the viewer's own time zone; the server's zone is UTC.
 const Time = ({ value }: { value: Date | null }) =>
   value ? <LocalTime iso={value.toISOString()} /> : null;
@@ -92,6 +106,7 @@ export default async function DashboardPage({
                 <Th />
                 <Th className="whitespace-nowrap">Event Time</Th>
                 <Th className="whitespace-nowrap">Area</Th>
+                <Th className="whitespace-nowrap">Machine</Th>
                 <Th className="whitespace-nowrap">Category</Th>
                 <Th className="whitespace-nowrap">Priority</Th>
                 <Th className="whitespace-nowrap">Author</Th>
@@ -119,14 +134,15 @@ export default async function DashboardPage({
                   </Td>
                   <Td className="whitespace-nowrap"><Time value={log.eventTime} /></Td>
                   <Td className="whitespace-nowrap">{log.area}</Td>
+                  <Td className="whitespace-nowrap">{log.machine ?? "—"}</Td>
                   <Td className="whitespace-nowrap">{log.category}</Td>
-                  <Td className="whitespace-nowrap">{log.priority ?? "—"}</Td>
+                  <Td className={`whitespace-nowrap font-semibold ${LOG_PRIORITY_STYLES[log.priority ?? ""] ?? "text-slate-100"}`}>{log.priority ?? "—"}</Td>
                   <Td className="whitespace-nowrap">{log.createdBy?.displayName ?? "—"}</Td>
                   <Td className="w-full whitespace-pre-wrap">{log.message}</Td>
-                  <Td className={`w-[100px] min-w-[100px] ${log.status === "Open" ? "text-amber-300" : "text-slate-400"}`}>{log.status}</Td>
+                  <Td className={`w-[100px] min-w-[100px] ${LOG_STATUS_STYLES[log.status] ?? "text-slate-400"}`}>{log.status}</Td>
                 </tr>
               ))}
-              {logs.length === 0 ? <EmptyRow colSpan={8} label="No log entries yet." /> : null}
+              {logs.length === 0 ? <EmptyRow colSpan={9} label="No log entries yet." /> : null}
             </tbody>
           </table>
         </section>

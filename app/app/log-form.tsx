@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLayoutEffect, useState, useSyncExternalStore, useTransition } from "react";
-import { LOG_CATEGORIES, LOG_PRIORITIES, LOG_STATUSES, MAX_MESSAGE } from "@/lib/operator-logs";
+import { LOG_CATEGORIES, LOG_MACHINES, LOG_PRIORITIES, LOG_STATUSES, MAX_MESSAGE } from "@/lib/operator-logs";
 
 export type LogFormValues = {
   eventTime: string; // ISO
   area: string;
+  machine: string;
   category: string;
   priority: string;
   status: string;
@@ -48,6 +49,7 @@ export function LogForm({
   const eventTime =
     typedTime ?? (mounted ? toLocalInput(initial ? new Date(initial.eventTime) : new Date()) : "");
   const [area, setArea] = useState(initial?.area ?? "");
+  const [machine, setMachine] = useState(initial?.machine ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
   const [priority, setPriority] = useState(initial?.priority ?? "");
   const [status, setStatus] = useState(initial?.status ?? "");
@@ -61,6 +63,7 @@ export function LogForm({
     return () => {
       setTypedTime(null);
       setArea(initial?.area ?? "");
+      setMachine(initial?.machine ?? "");
       setCategory(initial?.category ?? "");
       setPriority(initial?.priority ?? "");
       setStatus(initial?.status ?? "");
@@ -82,6 +85,7 @@ export function LogForm({
             // The picker value is in the viewer's zone; send an absolute time.
             eventTime: new Date(eventTime).toISOString(),
             area,
+            machine,
             category,
             priority,
             status,
@@ -134,6 +138,12 @@ export function LogForm({
           <select id="area" required value={area} onChange={(e) => setArea(e.target.value)} className={FIELD}>
             <option value="">-</option>
             {(!area || areas.includes(area) ? areas : [area, ...areas]).map((a) => <option key={a}>{a}</option>)}
+          </select>
+
+          <label htmlFor="machine">Machine</label>
+          <select id="machine" value={machine} onChange={(e) => setMachine(e.target.value)} className={FIELD}>
+            <option value="">-</option>
+            {LOG_MACHINES.map((m) => <option key={m}>{m}</option>)}
           </select>
         </div>
 

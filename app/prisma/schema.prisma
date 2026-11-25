@@ -109,6 +109,7 @@ model OperatorLog {
   id        BigInt   @id @default(autoincrement())
   eventTime DateTime @map("event_time") @db.DateTime(3)
   area      String   @db.VarChar(64)
+  machine   String?  @db.VarChar(64)
   category  String   @db.VarChar(32)
   priority  String?  @db.VarChar(16)
   status    String   @default("Open") @db.VarChar(16)

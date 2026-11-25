@@ -28,6 +28,7 @@ export default async function EditLogPage({ params }: { params: Promise<{ id: st
         initial={{
           eventTime: log.eventTime.toISOString(),
           area: log.area,
+          machine: log.machine ?? "",
           category: log.category,
           priority: log.priority ?? "",
           status: log.status,

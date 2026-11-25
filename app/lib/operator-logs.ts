@@ -22,11 +22,15 @@ export const DEFAULT_AREAS = [
   "Area 10",
 ] as const;
 
+// The Machine dropdown options. Edit this list to add or rename a machine.
+export const LOG_MACHINES = ["r2d2", "r2d4", "r2d5", "r2d6"] as const;
+
 export const MAX_MESSAGE = 2000;
 
 export type LogInput = {
   eventTime: Date;
   area: string;
+  machine: string | null;
   category: string;
   priority: string | null;
   status: string;
@@ -47,6 +51,12 @@ export function parseLogInput(
 
   const area = typeof b.area === "string" ? b.area.trim() : "";
   if (!area || area.length > 64) return { error: "Area is required" };
+
+  // Optional: some entries (plant-wide notes) do not concern one machine.
+  const machine = b.machine === "" || b.machine == null ? null : String(b.machine);
+  if (machine !== null && !(LOG_MACHINES as readonly string[]).includes(machine)) {
+    return { error: "Machine is invalid" };
+  }
 
   if (!(LOG_CATEGORIES as readonly string[]).includes(b.category as string)) {
     return { error: "Category is invalid" };
@@ -73,6 +83,7 @@ export function parseLogInput(
     data: {
       eventTime,
       area,
+      machine,
       category: b.category as string,
       priority,
       status: b.status as string,
