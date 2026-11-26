@@ -6,7 +6,7 @@
 
 **Context:**
 
-EKS workers, the ingestion Lambda, and RDS need internal connectivity. The platform also needs internet-facing entry points and outbound access from private workloads. The configuration uses `us-east-1a` and `us-east-1b` in `us-east-1`.
+EKS workers (including the web app and its queue worker) and RDS need internal connectivity. The platform also needs internet-facing entry points and outbound access from private workloads. The configuration uses `us-east-1a` and `us-east-1b` in `us-east-1`.
 
 **Options Considered:**
 
@@ -16,7 +16,7 @@ EKS workers, the ingestion Lambda, and RDS need internal connectivity. The platf
 
 **Decision:**
 
-Use a `172.20.0.0/16` VPC with two public and two private subnets. Public subnets route through an internet gateway. Both private subnets share a route table whose default route uses one NAT gateway in the first public subnet. Place EKS workers, RDS's subnet group, and the ingestion Lambda in private subnets.
+Use a `172.20.0.0/16` VPC with two public and two private subnets. Public subnets route through an internet gateway. Both private subnets share a route table whose default route uses one NAT gateway in the first public subnet. Place EKS workers and RDS's subnet group in private subnets.
 
 Retain the configured EKS private and public API endpoints. The public endpoint currently allows `0.0.0.0/0`; private worker placement must not be described as a private-only control plane.
 
@@ -24,4 +24,4 @@ Retain the configured EKS private and public API endpoints. The public endpoint 
 
 Private workloads have controlled inbound paths while retaining outbound connectivity. Both AZs depend on the first AZ's NAT gateway for this default egress path, and traffic from the second AZ crosses zones. Security groups and IAM remain necessary controls. Revisit shared NAT and public API access when availability targets and administrator access requirements are agreed.
 
-**Evidence:** [VPC](../../3-vpc.tf), [subnets](../../5-subnets.tf), [NAT](../../6-nat.tf), [routes](../../7-routes.tf), [EKS endpoint](../../9-eks.tf), [Lambda networking](../../22-iot-ingest.tf).
+**Evidence:** [VPC](../../3-vpc.tf), [subnets](../../5-subnets.tf), [NAT](../../6-nat.tf), [routes](../../7-routes.tf), [EKS endpoint](../../9-eks.tf).
