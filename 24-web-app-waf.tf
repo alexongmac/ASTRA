@@ -77,6 +77,22 @@ resource "aws_wafv2_web_acl" "web_app" {
         managed_rule_group_statement {
           name        = rule.key
           vendor_name = "AWS"
+
+          # The Common rule set blocks any request body over 8 KB, which stops
+          # attachments being uploaded on the shift handover page. Count that one
+          # rule instead of blocking; the BlockLargeBodyExceptUploads rule below
+          # restores the same limit for every path except the upload endpoints.
+          dynamic "rule_action_override" {
+            for_each = rule.key == "AWSManagedRulesCommonRuleSet" ? ["SizeRestrictions_BODY"] : []
+
+            content {
+              name = rule_action_override.value
+
+              action_to_use {
+                count {}
+              }
+            }
+          }
         }
       }
 
@@ -85,6 +101,65 @@ resource "aws_wafv2_web_acl" "web_app" {
         metric_name                = rule.key
         sampled_requests_enabled   = true
       }
+    }
+  }
+
+  # Same 8 KB body limit the Common rule set applies, but not for the shift
+  # handover endpoints, whose uploads are larger (the app caps each file itself).
+  rule {
+    name     = "BlockLargeBodyExceptUploads"
+    priority = 15
+
+    action {
+      block {}
+    }
+
+    statement {
+      and_statement {
+        statement {
+          size_constraint_statement {
+            comparison_operator = "GT"
+            size                = 8192
+
+            field_to_match {
+              body {
+                oversize_handling = "MATCH"
+              }
+            }
+
+            text_transformation {
+              priority = 0
+              type     = "NONE"
+            }
+          }
+        }
+
+        statement {
+          not_statement {
+            statement {
+              byte_match_statement {
+                search_string         = "/api/shift-handovers/"
+                positional_constraint = "STARTS_WITH"
+
+                field_to_match {
+                  uri_path {}
+                }
+
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "BlockLargeBodyExceptUploads"
+      sampled_requests_enabled   = true
     }
   }
 

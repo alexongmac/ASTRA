@@ -95,3 +95,17 @@ export function parseLogInput(
     },
   };
 }
+
+// Operator log colours. Full class names (not built strings) so Tailwind sees them.
+export const LOG_PRIORITY_STYLES: Record<string, string> = {
+  High: "text-red-500",
+  Medium: "text-orange-400",
+  Low: "text-green-400",
+};
+
+export const LOG_STATUS_STYLES: Record<string, string> = {
+  Open: "text-amber-300",
+  Closed: "text-green-400",
+  "On-Hold": "text-sky-400",
+  Cancelled: "text-slate-400",
+};

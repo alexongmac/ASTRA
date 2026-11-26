@@ -45,6 +45,11 @@ export async function DELETE(_request: Request, { params }: Ctx) {
     return Response.json({ error: `${existing.status} entries cannot be deleted` }, { status: 409 });
   }
 
+  const inHandover = await prisma.shiftHandoverLog.count({ where: { logId } });
+  if (inHandover > 0) {
+    return Response.json({ error: "This entry is part of a shift handover" }, { status: 409 });
+  }
+
   await prisma.operatorLog.deleteMany({ where: { id: logId } });
   return Response.json({ status: "deleted" });
 }

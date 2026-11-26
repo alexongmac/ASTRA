@@ -2,10 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/auth";
-import { isLocked } from "@/lib/operator-logs";
+import { LOG_PRIORITY_STYLES, LOG_STATUS_STYLES, isLocked } from "@/lib/operator-logs";
 import { prisma } from "@/lib/prisma";
+import { HANDOVER_STATUS_STYLES, isEditable, roleOf } from "@/lib/shift-handover";
 import { AcknowledgeButton } from "./acknowledge-button";
 import { AutoRefresh } from "./auto-refresh";
+import { DeleteHandoverButton } from "./delete-handover-button";
 import { DeleteLogButton } from "./delete-log-button";
 import { Header } from "./header";
 import { MessageCell } from "./message-cell";
@@ -28,20 +30,6 @@ const STATUS_STYLES: Record<string, string> = {
   cleared: "text-slate-400",
 };
 
-// Operator log colours. Full class names (not built strings) so Tailwind sees them.
-const LOG_PRIORITY_STYLES: Record<string, string> = {
-  High: "text-red-500",
-  Medium: "text-orange-400",
-  Low: "text-green-400",
-};
-
-const LOG_STATUS_STYLES: Record<string, string> = {
-  Open: "text-amber-300",
-  Closed: "text-green-400",
-  "On-Hold": "text-sky-400",
-  Cancelled: "text-slate-400",
-};
-
 // Renders in the viewer's own time zone; the server's zone is UTC.
 const Time = ({ value }: { value: Date | null }) =>
   value ? <LocalTime iso={value.toISOString()} /> : null;
@@ -59,8 +47,9 @@ export default async function DashboardPage({
   const { tab } = await searchParams;
   const showHistory = tab === "history";
   const showLogs = tab === "logs";
+  const showHandover = tab === "handover";
 
-  const [active, history, logs] = await Promise.all([
+  const [active, history, logs, handovers] = await Promise.all([
     prisma.alarm.findMany({
       where: { status: { in: ["raised", "acknowledged"] } },
       orderBy: { raisedAt: "desc" },
@@ -79,6 +68,13 @@ export default async function DashboardPage({
           include: { createdBy: true },
         })
       : Promise.resolve([]),
+    showHandover
+      ? prisma.shiftHandover.findMany({
+          orderBy: { startTime: "desc" },
+          take: 100,
+          include: { outgoing: true, incoming: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -87,12 +83,86 @@ export default async function DashboardPage({
       <Header userName={session.user.name} />
 
       <nav className="mt-5 flex gap-2">
-        <Tab href="/" label={`Active alarms (${active.length})`} active={!showHistory && !showLogs} />
+        <Tab href="/" label={`Active alarms (${active.length})`} active={!showHistory && !showLogs && !showHandover} />
         <Tab href="/?tab=history" label="Alarm History" active={showHistory} />
         <Tab href="/?tab=logs" label="Operator logs" active={showLogs} />
+        <Tab href="/?tab=handover" label="Shift handover" active={showHandover} />
       </nav>
 
-      {showLogs ? (
+      {showHandover ? (
+        <section className="mt-4 rounded-lg border border-slate-700 bg-slate-800 p-4 shadow-sm">
+          <div className="mb-3">
+            <Link
+              href="/shift-handover/new"
+              className="inline-flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              <span aria-hidden="true">+</span> New Entry
+            </Link>
+          </div>
+          <table className="w-full text-left text-xs">
+            <thead className="text-blue-400">
+              <tr>
+                <Th />
+                <Th className="whitespace-nowrap">Start Time</Th>
+                <Th className="whitespace-nowrap">End Time</Th>
+                <Th className="whitespace-nowrap">Area</Th>
+                <Th className="whitespace-nowrap">Outgoing Operator</Th>
+                <Th className="whitespace-nowrap">Incoming Operator</Th>
+                <Th className="w-full">Summary</Th>
+                <Th className="whitespace-nowrap">Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {handovers.map((h) => {
+                const canEdit = roleOf(session.user.operatorId, h).canEdit;
+                const editable = isEditable(h.status) && canEdit;
+                return (
+                  <tr key={String(h.id)} className="border-t border-slate-700">
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        {editable ? (
+                          <DeleteHandoverButton handoverId={String(h.id)} />
+                        ) : (
+                          <span className="text-slate-600" title="Only an On-Going or Rejected handover can be deleted, by the operators on it">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
+                            </svg>
+                          </span>
+                        )}
+                        <Link
+                          href={`/shift-handover/${h.id}`}
+                          title={editable ? "Edit" : "View"}
+                          aria-label={editable ? "Edit shift handover" : "View shift handover"}
+                          className="text-slate-300 hover:text-amber-300"
+                        >
+                          {editable ? (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          )}
+                        </Link>
+                      </div>
+                    </Td>
+                    <Td className="whitespace-nowrap"><Time value={h.startTime} /></Td>
+                    <Td className="whitespace-nowrap"><Time value={h.endTime} /></Td>
+                    <Td className="whitespace-nowrap">{h.area}</Td>
+                    <Td className="whitespace-nowrap">{h.outgoing?.displayName ?? "—"}</Td>
+                    <Td className="whitespace-nowrap">{h.incoming?.displayName ?? "—"}</Td>
+                    <Td className="w-full max-w-0 truncate" >{h.summary ?? ""}</Td>
+                    <Td className={`whitespace-nowrap font-semibold ${HANDOVER_STATUS_STYLES[h.status] ?? "text-slate-400"}`}>{h.status}</Td>
+                  </tr>
+                );
+              })}
+              {handovers.length === 0 ? <EmptyRow colSpan={8} label="No shift handovers yet." /> : null}
+            </tbody>
+          </table>
+        </section>
+      ) : showLogs ? (
         <section className="mt-4 rounded-lg border border-slate-700 bg-slate-800 p-4 shadow-sm">
           <div className="mb-3">
             <Link

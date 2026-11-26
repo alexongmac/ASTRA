@@ -15,6 +15,9 @@ model Operator {
 
   acknowledgedAlarms Alarm[]
   operatorLogs       OperatorLog[]
+  outgoingHandovers  ShiftHandover[] @relation("HandoverOutgoing")
+  incomingHandovers  ShiftHandover[] @relation("HandoverIncoming")
+  createdHandovers   ShiftHandover[] @relation("HandoverCreator")
 
   @@map("operators")
 }
@@ -120,6 +123,76 @@ model OperatorLog {
   createdById Int?      @map("created_by_id")
   createdBy   Operator? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
+  handoverLinks ShiftHandoverLog[]
+
   @@index([eventTime])
   @@map("operator_logs")
+}
+
+// An end-of-shift handover from the outgoing operator to the incoming one. The
+// outgoing and incoming operators are also the two approvers.
+model ShiftHandover {
+  id        BigInt    @id @default(autoincrement())
+  area      String    @db.VarChar(64)
+  machine   String?   @db.VarChar(64)
+  // On-Going -> Open for Approval -> Completed, or Rejected (editable again).
+  status    String    @default("On-Going") @db.VarChar(24)
+  // When "Start Handover" was selected.
+  startTime DateTime  @map("start_time") @db.DateTime(3)
+  // Set when both approvers approve.
+  endTime   DateTime? @map("end_time") @db.DateTime(3)
+
+  summary      String? @db.Text
+  healthSafety String? @map("health_safety") @db.Text
+  checklist    Json?
+
+  // "approved" or "rejected"; null until that person decides.
+  outgoingDecision String? @map("outgoing_decision") @db.VarChar(16)
+  incomingDecision String? @map("incoming_decision") @db.VarChar(16)
+
+  outgoingId  Int?      @map("outgoing_operator_id")
+  incomingId  Int?      @map("incoming_operator_id")
+  createdById Int?      @map("created_by_id")
+  outgoing    Operator? @relation("HandoverOutgoing", fields: [outgoingId], references: [id], onDelete: SetNull)
+  incoming    Operator? @relation("HandoverIncoming", fields: [incomingId], references: [id], onDelete: SetNull)
+  createdBy   Operator? @relation("HandoverCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  logs        ShiftHandoverLog[]
+  attachments ShiftHandoverAttachment[]
+
+  @@index([startTime])
+  @@map("shift_handovers")
+}
+
+// Operator-log entries included in a handover.
+model ShiftHandoverLog {
+  handoverId BigInt @map("handover_id")
+  logId      BigInt @map("log_id")
+
+  handover ShiftHandover @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  log      OperatorLog   @relation(fields: [logId], references: [id], onDelete: Restrict)
+
+  @@id([handoverId, logId])
+  @@index([logId])
+  @@map("shift_handover_logs")
+}
+
+// Files stored in the database (capped in code; see lib/shift-handover.ts).
+model ShiftHandoverAttachment {
+  id         BigInt   @id @default(autoincrement())
+  handoverId BigInt   @map("handover_id")
+  fileName   String   @map("file_name") @db.VarChar(255)
+  mimeType   String   @map("mime_type") @db.VarChar(127)
+  size       Int
+  data       Bytes    @db.LongBlob
+  comment    String?  @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  handover ShiftHandover @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+
+  @@index([handoverId])
+  @@map("shift_handover_attachments")
 }
