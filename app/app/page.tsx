@@ -10,7 +10,7 @@ import { AutoRefresh } from "./auto-refresh";
 import { DeleteHandoverButton } from "./delete-handover-button";
 import { DeleteLogButton } from "./delete-log-button";
 import { Header } from "./header";
-import { MessageCell } from "./message-cell";
+import { MessageCell, ViewLogButton } from "./message-cell";
 import { LocalTime } from "./local-time";
 
 // Session + live alarm data are request-time reads, so this route blocks.
@@ -187,21 +187,30 @@ export default async function DashboardPage({
               </tr>
             </thead>
             <tbody>
-              {logs.map((log) => (
+              {logs.map((log) => {
+                const details = {
+                  eventTime: log.eventTime.toISOString(),
+                  area: log.area,
+                  machine: log.machine,
+                  category: log.category,
+                  priority: log.priority,
+                  status: log.status,
+                  author: log.createdBy?.displayName ?? null,
+                  message: log.message,
+                };
+                return (
                 <tr key={String(log.id)} className="border-t border-slate-700">
                   <Td>
                     {isLocked(log.status) ? (
-                      // Closed and Cancelled entries are final: both actions are switched off.
-                      <div
-                        className="flex items-center gap-2 text-slate-600"
-                        title={`${log.status} entries cannot be edited or deleted`}
-                      >
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
-                        </svg>
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                        </svg>
+                      // Closed and Cancelled entries are final: delete is switched off and
+                      // the eye icon opens the entry read-only, as on the Shift handover list.
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-600" title={`${log.status} entries cannot be deleted`}>
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
+                          </svg>
+                        </span>
+                        <ViewLogButton log={details} />
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
@@ -226,22 +235,12 @@ export default async function DashboardPage({
                   <Td className={`whitespace-nowrap font-semibold ${LOG_PRIORITY_STYLES[log.priority ?? ""] ?? "text-slate-100"}`}>{log.priority ?? "—"}</Td>
                   <Td className="whitespace-nowrap">{log.createdBy?.displayName ?? "—"}</Td>
                   <Td className="w-full max-w-0">
-                    <MessageCell
-                      log={{
-                        eventTime: log.eventTime.toISOString(),
-                        area: log.area,
-                        machine: log.machine,
-                        category: log.category,
-                        priority: log.priority,
-                        status: log.status,
-                        author: log.createdBy?.displayName ?? null,
-                        message: log.message,
-                      }}
-                    />
+                    <MessageCell log={details} />
                   </Td>
                   <Td className={`w-[100px] min-w-[100px] ${LOG_STATUS_STYLES[log.status] ?? "text-slate-400"}`}>{log.status}</Td>
                 </tr>
-              ))}
+                );
+              })}
               {logs.length === 0 ? <EmptyRow colSpan={9} label="No log entries yet." /> : null}
             </tbody>
           </table>
