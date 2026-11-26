@@ -57,8 +57,14 @@ export function KeyValuesChart({ points }: { points: KeyPoint[] }) {
   };
 
   const ticks = Array.from({ length: 5 }, (_, i) => t0 + (span * i) / 4);
+  // On a short span, minutes alone repeat ("8:00 PM" twice), so add seconds.
+  const withSeconds = span < 15 * 60_000;
   const fmt = (t: number) =>
-    new Date(t).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    new Date(t).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      ...(withSeconds ? { second: "2-digit" as const } : {}),
+    });
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="OEE, availability, performance and quality over the shift">

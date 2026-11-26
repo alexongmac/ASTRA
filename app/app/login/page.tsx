@@ -41,7 +41,7 @@ export default async function LoginPage({
         <form action={login}>
           <div className="brand">
             <BrandGear />
-            <span>R2D2 Operator</span>
+            <span>Astra Edge Pte Ltd</span>
           </div>
 
           <h2>Welcome back</h2>
