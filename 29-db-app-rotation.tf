@@ -1,21 +1,21 @@
 # Automatic rotation of the astra_app MySQL password (the login created by
 # scripts/create-db-app-user.sh and stored by 28-db-app-user.tf).
 #
-# Secrets Manager runs a Lambda on a schedule. It is the "alternating users"
-# strategy, so a rotation causes no downtime. There are two MySQL accounts with
-# identical rights, astra_app and astra_app_clone, and only one is in the secret
-# at a time. Each rotation sets a NEW password on the account that is not in use
-# (creating it and copying the rights the first time), then switches the secret
-# to it. The account that was in use keeps its old password, so pods that have
-# not yet picked up the new secret can still connect. External Secrets then
-# copies the new login into the cluster and Reloader restarts the pods
-# (see ADR-0010).
+# Secrets Manager runs a Lambda on a schedule. It alternates between two MySQL
+# accounts with identical rights, astra_app and astra_app_clone, so a rotation
+# causes no downtime, and it never uses the master login.
 #
-# The cost of that: to create the second account and set its password, the
-# function logs in with the RDS master login (read from the master secret, whose
-# ARN is passed in the environment and not taken from the secret it rotates).
-# That is more access than a function that only changed its own password would
-# need. It can read only these two secrets and reach only the database.
+# scripts/create-db-app-user.sh creates both accounts once (that step needs the
+# master login, so a person runs it) and stores one as AWSCURRENT and the other
+# as AWSPREVIOUS. Each rotation then logs in as the account NOT in use, with its
+# previous password, changes its own password, and makes it current. The
+# account that was in use keeps its password, so pods that have not yet picked
+# up the new secret still connect. External Secrets then copies the new login
+# into the cluster and Reloader restarts the pods (see ADR-0010).
+#
+# The function can read and update only the app's secret and reach only the
+# database. If a rotation reports that the stored previous password no longer
+# works, re-run scripts/create-db-app-user.sh.
 #
 # Not part of the rotation: the RDS master password, which RDS rotates itself.
 #
@@ -129,14 +129,6 @@ data "aws_iam_policy_document" "db_rotation" {
     resources = [aws_secretsmanager_secret.db_app_credentials.arn]
   }
 
-  # The master login, used only to create the second account and set its
-  # password. Read only.
-  statement {
-    effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_db_instance.mysql.master_user_secret[0].secret_arn]
-  }
-
   statement {
     effect    = "Allow"
     actions   = ["secretsmanager:GetRandomPassword"]
@@ -175,10 +167,9 @@ resource "aws_lambda_function" "db_rotation" {
   environment {
     variables = {
       # From the database resource, not the secret, so a secret cannot point
-      # this function at another host or another login.
-      DB_HOST           = aws_db_instance.mysql.address
-      DB_PORT           = "3306"
-      MASTER_SECRET_ARN = aws_db_instance.mysql.master_user_secret[0].secret_arn
+      # this function at another host.
+      DB_HOST = aws_db_instance.mysql.address
+      DB_PORT = "3306"
     }
   }
 

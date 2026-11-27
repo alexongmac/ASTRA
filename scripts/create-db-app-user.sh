@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Create the application's least-privilege MySQL user (astra_app) and store its
-# login in Secrets Manager. Development only.
+# Create the application's two least-privilege MySQL accounts (astra_app and
+# astra_app_clone) and store their logins in Secrets Manager. Development only.
 #
-# The app used to connect as the RDS master user. astra_app can only SELECT,
-# INSERT, UPDATE and DELETE rows in astradb, and only from inside the VPC.
-# The master user stays for migrations and seeding.
+# The app used to connect as the RDS master user. These accounts can only
+# SELECT, INSERT, UPDATE and DELETE rows in astradb, and only from inside the
+# VPC. The master user stays for migrations, seeding and this script.
+#
+# Why two: the monthly rotation (29-db-app-rotation.tf) alternates between them
+# with no downtime. It changes the password of the account NOT in use by logging
+# in as that account with its previous password, so it never needs the master
+# login. That previous password is what this script stores as AWSPREVIOUS.
 #
 # Prerequisites
 #   1. terraform apply has created the secret (28-db-app-user.tf).
@@ -13,16 +18,14 @@
 #        kubectl port-forward -n mysql pod/rds-proxy 3306:3306
 #   4. `npm ci` has been run in app/.
 #
-# Safe to run again: it generates a new password, resets the MySQL user and
-# overwrites the secret. Nothing secret is printed or written outside a
-# temporary file that is deleted on exit.
+# Safe to run again: it generates two new passwords, resets both accounts and
+# writes the secret so that astra_app is current and astra_app_clone is
+# previous. Nothing secret is printed or written outside a temporary file that
+# is deleted on exit. Pods using the old login lose it at that moment, so run it
+# at a quiet time; they pick up the new one within 5 minutes.
 #
-# This is for the first creation, or to recover by hand. Once
-# 29-db-app-rotation.tf is applied, Secrets Manager rotates this password every
-# month on its own; if a rotation is ever left half-done (the secret no longer
-# matches MySQL), re-running this script puts them back in step. The rotation
-# alternates between astra_app and astra_app_clone; this script always resets and
-# stores astra_app, so after it runs the secret names astra_app again.
+# This is for the first setup, or to recover by hand if a rotation ever reports
+# that the stored previous password no longer works.
 #
 # Usage: scripts/create-db-app-user.sh
 set -euo pipefail
@@ -31,6 +34,7 @@ CLUSTER="astra-eks-development-cluster"
 DB_IDENTIFIER="astra-mysql-db"
 APP_SECRET="astra-eks-development-db-app-credentials"
 APP_USER="astra_app"
+CLONE_USER="astra_app_clone"
 PORT=3306
 
 cd "$(dirname "$0")/.."
@@ -68,21 +72,30 @@ PY
 export ADMIN_DATABASE_URL
 rm -f "$TMP/master.json"
 
-# 36 random bytes -> more than 32 letters and digits. No punctuation, so the
-# password needs no escaping in a URL.
+# 48 random bytes -> more than 40 letters and digits. No punctuation, so the
+# passwords need no escaping in a URL.
 APP_PASSWORD="$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 40)"
-export APP_PASSWORD
+CLONE_PASSWORD="$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 40)"
+export APP_PASSWORD CLONE_PASSWORD
 
-echo "==> Creating $APP_USER with row-level rights on astradb"
+echo "==> Creating $APP_USER and $CLONE_USER with row-level rights on astradb"
 (cd app && npx --no-install tsx scripts/create-app-user.mts)
 
-echo "==> Storing the login in Secrets Manager ($APP_SECRET)"
-python3 - "$APP_USER" > "$TMP/app-secret.json" <<'PY'
+# Two writes, clone first. Each put-secret-value becomes AWSCURRENT and moves
+# the version it replaces to AWSPREVIOUS, so this leaves astra_app current and
+# astra_app_clone previous - the password the next rotation logs in with.
+store() {
+  python3 - "$1" "$2" > "$TMP/app-secret.json" <<'PY'
 import json, os, sys
-print(json.dumps({"username": sys.argv[1], "password": os.environ["APP_PASSWORD"]}))
+print(json.dumps({"username": sys.argv[1], "password": os.environ[sys.argv[2]]}))
 PY
-aws secretsmanager put-secret-value --secret-id "$APP_SECRET" \
-  --secret-string "file://$TMP/app-secret.json" --query VersionId --output text > /dev/null
+  aws secretsmanager put-secret-value --secret-id "$APP_SECRET" \
+    --secret-string "file://$TMP/app-secret.json" --query VersionId --output text > /dev/null
+  rm -f "$TMP/app-secret.json"
+}
+echo "==> Storing both logins in Secrets Manager ($APP_SECRET)"
+store "$CLONE_USER" CLONE_PASSWORD
+store "$APP_USER" APP_PASSWORD
 
-echo "==> Done. $APP_USER exists and its login is in $APP_SECRET."
+echo "==> Done. $APP_USER is current and $CLONE_USER is previous in $APP_SECRET."
 echo "    Next: scripts/check-db-app-user.sh to prove it works and is limited."

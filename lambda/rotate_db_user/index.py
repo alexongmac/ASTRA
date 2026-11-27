@@ -1,28 +1,32 @@
 """Rotate the astra_app MySQL password held in AWS Secrets Manager, with no
-downtime ("alternating users").
+downtime and without the master login.
 
 There are two MySQL accounts with identical rights, astra_app and
-astra_app_clone, and only one of them is in the secret at a time. Each rotation
-sets a NEW password on the account that is not in use, then switches the secret
-to it. The account that was in use keeps its old password untouched, so pods
-that have not yet picked up the new secret can still connect. Nothing breaks
-while External Secrets and the pods catch up.
+astra_app_clone, created once by scripts/create-db-app-user.sh. Only one is
+AWSCURRENT in the secret at a time; the other one's login is AWSPREVIOUS.
+
+Each rotation changes the password of the account that is NOT in use. It logs
+in as that account with its previous password and changes its own password,
+which any MySQL account may do, so this function never needs the master login.
+Then it makes that account current. The account that was in use keeps its
+password, so pods that have not yet picked up the new secret still connect.
 
 Secrets Manager calls this four times per rotation:
 
   createSecret  pick the other account and generate a password for it (AWSPENDING)
-  setSecret     with the master login: create that account if needed, copy the
-                current account's rights onto it, and set the new password
-  testSecret    log in as the other account with the new password
-  finishSecret  make it AWSCURRENT
+  setSecret     log in as the other account with its previous password and
+                change its own password
+  testSecret    log in with the new login, and check both accounts still have
+                the same rights
+  finishSecret  make it AWSCURRENT (Secrets Manager moves the old one to
+                AWSPREVIOUS, ready for next month)
 
 Each step can be retried, so each one checks what has already been done.
 
-Environment (never read from the secret, so a secret cannot redirect this
-function to another host or another login):
-  DB_HOST             the RDS endpoint
-  DB_PORT             3306
-  MASTER_SECRET_ARN   the RDS-managed master secret, used only in setSecret
+Environment (never read from the secret, so a secret cannot point this function
+at another host):
+  DB_HOST  the RDS endpoint
+  DB_PORT  3306
 """
 
 import json
@@ -41,10 +45,8 @@ sm = boto3.client("secretsmanager")
 
 PASSWORD_LENGTH = 40
 CLONE_SUFFIX = "_clone"
-# Names go into SQL text (a user name cannot be a bound parameter in GRANT), so
-# only plain characters are accepted.
 USER_RE = re.compile(r"^[A-Za-z0-9_]{1,32}$")
-HOST_RE = re.compile(r"^[0-9A-Za-z.%_-]{1,60}$")
+SETUP_HINT = "run scripts/create-db-app-user.sh to set up both accounts again"
 
 
 def handler(event, _context):
@@ -82,14 +84,17 @@ def _get(arn, stage, token=None):
     return json.loads(sm.get_secret_value(**kwargs)["SecretString"])
 
 
-def _master():
-    return json.loads(sm.get_secret_value(SecretId=os.environ["MASTER_SECRET_ARN"])["SecretString"])
+def _get_previous(arn):
+    try:
+        return _get(arn, "AWSPREVIOUS")
+    except sm.exceptions.ResourceNotFoundException:
+        return None
 
 
 def _connect(login):
     """Open a connection as the user in `login`. Encrypted, not verified: the
-    traffic stays inside the VPC, and this keeps passwords off the wire in
-    clear when they are set."""
+    traffic stays inside the VPC, and this keeps the new password off the wire
+    in clear when it is set."""
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
@@ -115,13 +120,26 @@ def _can_login(login):
 
 def _other(username):
     """astra_app <-> astra_app_clone."""
-    if username.endswith(CLONE_SUFFIX):
-        other = username[: -len(CLONE_SUFFIX)]
-    else:
-        other = username + CLONE_SUFFIX
+    if not USER_RE.match(username):
+        raise ValueError("The secret's user name has unexpected characters")
+    other = username[: -len(CLONE_SUFFIX)] if username.endswith(CLONE_SUFFIX) else username + CLONE_SUFFIX
     if not USER_RE.match(other):
         raise ValueError(f"Cannot alternate the user name {username!r}")
     return other
+
+
+def _own_grants(login):
+    """This account's rights, with its own name taken out so two accounts can
+    be compared."""
+    connection = _connect(login)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW GRANTS")
+            rows = [row[0] for row in cursor.fetchall()]
+    finally:
+        connection.close()
+    name = f"`{login['username']}`@"
+    return sorted(row.replace(name, "`<user>`@") for row in rows)
 
 
 def create_secret(arn, token):
@@ -133,8 +151,6 @@ def create_secret(arn, token):
     except sm.exceptions.ResourceNotFoundException:
         pass
 
-    if not USER_RE.match(current["username"]):
-        raise ValueError("The secret's user name has unexpected characters")
     # Letters and digits only, so the password never needs escaping in a URL.
     new_password = sm.get_random_password(
         PasswordLength=PASSWORD_LENGTH, ExcludePunctuation=True
@@ -153,53 +169,40 @@ def create_secret(arn, token):
 
 def set_secret(arn, token):
     pending = _get(arn, "AWSPENDING", token)
-    current = _get(arn, "AWSCURRENT")
     if _can_login(pending):
         logger.info("setSecret: the pending login already works")
         return
+    current = _get(arn, "AWSCURRENT")
     if pending["username"] != _other(current["username"]):
         raise ValueError("The pending user is not the alternate of the current user")
-    source, target = current["username"], pending["username"]
 
-    connection = _connect(_master())
+    # The account we are about to switch to was last in use before this one, so
+    # its password is the AWSPREVIOUS version.
+    previous = _get_previous(arn)
+    if not previous or previous.get("username") != pending["username"]:
+        raise ValueError(f"No previous password is stored for {pending['username']}; {SETUP_HINT}")
+    if not _can_login(previous):
+        raise ValueError(f"The stored previous password for {pending['username']} no longer works; {SETUP_HINT}")
+
+    connection = _connect(previous)
     try:
         with connection.cursor() as cursor:
-            # Where the account in use may connect from (for example 172.20.%).
-            cursor.execute("SELECT Host FROM mysql.user WHERE User = %s", (source,))
-            hosts = [row[0] for row in cursor.fetchall()]
-            if len(hosts) != 1 or not HOST_RE.match(hosts[0]):
-                raise ValueError(f"Expected exactly one account named {source}, found {len(hosts)}")
-            host = hosts[0]
-
-            cursor.execute("SHOW GRANTS FOR %s@%s", (source, host))
-            grants = [row[0] for row in cursor.fetchall()]
-
-            cursor.execute("CREATE USER IF NOT EXISTS %s@%s IDENTIFIED BY %s", (target, host, pending["password"]))
-            cursor.execute("ALTER USER %s@%s IDENTIFIED BY %s", (target, host, pending["password"]))
-            # Copy the rights from the account in use, starting from nothing so
-            # the two can never drift apart.
-            cursor.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM %s@%s", (target, host))
-            old_spec, new_spec = f"`{source}`@`{host}`", f"`{target}`@`{host}`"
-            for grant in grants:
-                if not grant.endswith(" TO " + old_spec) and (" TO " + old_spec + " ") not in grant:
-                    raise ValueError("Unexpected grant text; refusing to copy it")
-                cursor.execute(grant.replace(" TO " + old_spec, " TO " + new_spec, 1))
+            # Any account may change its own password; no extra privilege needed.
+            cursor.execute("ALTER USER USER() IDENTIFIED BY %s", (pending["password"],))
         connection.commit()
     finally:
         connection.close()
-    logger.info("setSecret: %s now has %s's rights and the new password", target, source)
+    logger.info("setSecret: changed the password for %s", pending["username"])
 
 
 def test_secret(arn, token):
     pending = _get(arn, "AWSPENDING", token)
-    connection = _connect(pending)
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
-    finally:
-        connection.close()
-    logger.info("testSecret: the pending login works")
+    current = _get(arn, "AWSCURRENT")
+    # Logs in with the new login (raises if it does not work) and compares rights,
+    # so the switch never moves the app to an account with different access.
+    if _own_grants(pending) != _own_grants(current):
+        raise ValueError(f"{pending['username']} and {current['username']} have different rights; {SETUP_HINT}")
+    logger.info("testSecret: the pending login works and has the same rights")
 
 
 def finish_secret(arn, token):
