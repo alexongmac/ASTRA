@@ -66,3 +66,7 @@ lambda/layer/
 !migrations/*.sqlgrafana-backup.db
 grafana-backup.db*
 grafana-backup.db*
+
+# Python bytecode (the Lambda functions in lambda/ are run and tested locally)
+__pycache__/
+*.pyc

@@ -493,6 +493,9 @@ resource "aws_iam_policy" "alerting_scoped" {
           "secretsmanager:GetResourcePolicy",
           "secretsmanager:TagResource",
           "secretsmanager:UntagResource",
+          # Turn a rotation schedule on or off (29-db-app-rotation.tf).
+          "secretsmanager:RotateSecret",
+          "secretsmanager:CancelRotateSecret",
         ]
         Resource = "arn:aws:secretsmanager:*:*:secret:astra-*"
       },

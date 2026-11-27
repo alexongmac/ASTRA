@@ -17,6 +17,11 @@
 # overwrites the secret. Nothing secret is printed or written outside a
 # temporary file that is deleted on exit.
 #
+# This is for the first creation, or to recover by hand. Once
+# 29-db-app-rotation.tf is applied, Secrets Manager rotates this password every
+# month on its own; if a rotation is ever left half-done (the secret no longer
+# matches MySQL), re-running this script puts them back in step.
+#
 # Usage: scripts/create-db-app-user.sh
 set -euo pipefail
 
