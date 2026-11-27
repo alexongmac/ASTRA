@@ -177,3 +177,34 @@ resource "aws_cloudwatch_metric_alarm" "oee_queue_backlog" {
   alarm_actions = [aws_sns_topic.queue_alerts.arn]
   ok_actions    = [aws_sns_topic.queue_alerts.arn]
 }
+
+# Catches a slow or stuck worker even when only a few events are waiting, which
+# the backlog alarm above (more than 100) would miss. The worker normally takes
+# events off the queue within seconds (measured 2026-11-28: oldest message age
+# 0 s), so an event that has waited 5 minutes for 5 minutes in a row means
+# operators are looking at stale data.
+#
+# Not covered: the machines going quiet. They are switched off most of the time
+# (events in 2 of the 48 hours before 2026-11-28), so a "no events" alarm would
+# fire constantly; that needs a heartbeat from the machine bridge instead.
+resource "aws_cloudwatch_metric_alarm" "oee_message_age" {
+  alarm_name          = "${local.eks_name}-oee-message-age"
+  alarm_description   = "An OEE event has been waiting in ${aws_sqs_queue.oee_events.name} for more than 5 minutes. The worker is slow or stuck; check that the astra-web-app-worker pod is running."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 5
+  threshold           = 300
+  comparison_operator = "GreaterThanThreshold"
+  # An idle queue publishes no data; that is healthy, not stuck.
+  treat_missing_data = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.oee_events.name
+  }
+
+  alarm_actions = [aws_sns_topic.queue_alerts.arn]
+  ok_actions    = [aws_sns_topic.queue_alerts.arn]
+}
