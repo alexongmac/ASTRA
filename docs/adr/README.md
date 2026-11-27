@@ -14,7 +14,7 @@ The decisions reflect existing configuration. Options and tradeoffs are reconstr
 | [0006](0006-workload-identity.md) | EKS Pod Identity for AWS service access |
 | [0007](0007-ingress-dns-tls.md) | Traefik and AWS ALB ingress with automated DNS and certificates |
 | [0008](0008-observability.md) | Prometheus, Grafana, Loki, and EKS audit logs |
-| [0009](0009-persistent-storage.md) | EBS-backed persistent volumes (EBS CSI, gp2) for in-cluster state |
+| [0009](0009-persistent-storage.md) | EBS-backed persistent volumes (EBS CSI, gp3 for new claims) for in-cluster state |
 | [0010](0010-access-control-rbac.md) | Layered role-based access across AWS, Kubernetes, Argo CD and the app |
 
 Each record links to its supporting source files. Terraform defines AWS infrastructure and selected EKS add-ons. Several Helm charts and application resources are expected from a separate platform/application repository or manual setup described in the root README; their deployment is not verified here.
