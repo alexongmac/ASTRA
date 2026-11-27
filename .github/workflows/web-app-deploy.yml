@@ -22,8 +22,10 @@ env:
   ECR_REPOSITORY: astra-eks-${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}-app
 
 jobs:
-  # Dependency, source and container scanning for the Next.js app. These are
-  # continue-on-error like the Terraform workflow's scans: they report findings
+  # Code checks, then dependency, source and container scanning for the Next.js
+  # app. The lint and type check BLOCK the deploy: build-and-push needs this job,
+  # so a push that fails either one never reaches the cluster. The Snyk scans
+  # are continue-on-error like the Terraform workflow's: they report findings
   # without blocking a class-project deploy.
   security-scan:
     runs-on: ubuntu-latest
@@ -44,6 +46,28 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: npm ci
+
+      # ESLint with the app's own config (eslint.config.mjs).
+      - name: Lint
+        working-directory: app
+        run: npm run lint
+
+      # Both generated type sources must exist before tsc, and neither is
+      # committed: a fresh checkout fails with 22 errors without the Prisma
+      # client and with "Cannot find name 'LayoutProps'" without the Next.js
+      # route types. DATABASE_URL is only needed so the Prisma CLI can load
+      # prisma.config.ts (as in the Dockerfile); no connection is made.
+      - name: Generate types
+        working-directory: app
+        env:
+          DATABASE_URL: mysql://build:build@127.0.0.1:3306/build
+        run: |
+          npx prisma generate
+          npx next typegen
+
+      - name: Type check
+        working-directory: app
+        run: npx tsc --noEmit
 
       - name: Install Snyk CLI
         uses: snyk/actions/setup@master
