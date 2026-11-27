@@ -1,0 +1,6 @@
+# Pushing a change to this file runs .github/workflows/terraform-unlock.yml,
+# which releases the Terraform state lock whose ID is on the first line that
+# is not a comment. Push it on the branch of the locked environment.
+#
+# 2026-11-28: lock left by a local `terraform plan` run without -lock=false.
+4b9af10b-267c-b92d-ba98-01446486c79d

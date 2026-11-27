@@ -1,19 +1,30 @@
 name: Terraform Force Unlock
 
 # Releases a stuck Terraform state lock. Needed only if a run was killed
-# mid-way, or if someone ran `terraform apply` or `terraform plan` from a laptop
-# with locking on: a student IAM user can create the lock file but the shared
-# bucket's policy will not let it delete it, so the lock stays and every
-# pipeline run then stops with "Error acquiring the state lock".
+# mid-way, or if someone ran a plain `terraform apply` or `terraform plan` from a
+# laptop with locking on: a student IAM user can create the lock file but the
+# shared bucket's policy will not let it delete it, so the lock stays and every
+# pipeline run then stops with "Error acquiring the state lock". The pipeline
+# role may delete lock files, so this workflow can release it.
 #
-# Use: Actions > Terraform Force Unlock > Run workflow, on the branch of the
-# locked environment (develop = development, main = production), and paste the
-# lock ID from that error message. Production waits for the same approval as a
-# production apply.
+# Two ways to run it, on the branch of the locked environment
+# (develop = development, main = production):
 #
-# Only unlock when you are sure nothing else is running against that state.
+#   1. Push a change to .github/terraform-unlock-request whose first line that
+#      is not a comment is the lock ID from the error message. Works on any
+#      branch.
+#   2. Actions > Terraform Force Unlock > Run workflow, pasting the lock ID.
+#      GitHub only shows this button once this file is on the default branch
+#      (main).
+#
+# Production waits for the same approval as a production apply. Only unlock
+# when you are sure nothing else is running against that state.
 
 on:
+  push:
+    branches: [develop, main]
+    paths:
+      - ".github/terraform-unlock-request"
   workflow_dispatch:
     inputs:
       lock_id:
@@ -34,7 +45,7 @@ jobs:
       ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
       # Passed through the environment, not pasted into the script, so the
       # input cannot inject shell commands.
-      LOCK_ID: ${{ inputs.lock_id }}
+      INPUT_LOCK_ID: ${{ inputs.lock_id }}
 
     # Same queue as terraform-apply.yml, so this never runs alongside an apply.
     concurrency:
@@ -43,19 +54,35 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      # The button's input, or else the request file. Either way it must look
+      # like a Terraform lock ID (a UUID) before it is used.
+      - name: Read the lock ID
+        run: |
+          LOCK_ID="$INPUT_LOCK_ID"
+          if [ -z "$LOCK_ID" ]; then
+            LOCK_ID="$(grep -v '^[[:space:]]*#' .github/terraform-unlock-request | tr -d '[:space:]' | head -c 36)"
+          fi
+          if ! echo "$LOCK_ID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "::error::No valid lock ID found. Expected a UUID such as 4b9af10b-267c-b92d-ba98-01446486c79d."
+            exit 1
+          fi
+          echo "LOCK_ID=$LOCK_ID" >> "$GITHUB_ENV"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Terraform Init
-        run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
+        run: terraform init -input=false -backend-config="key=astra/${ENVIRONMENT}.tfstate"
 
       - name: Terraform Force Unlock
         run: terraform force-unlock -force "$LOCK_ID"
