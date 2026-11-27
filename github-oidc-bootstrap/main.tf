@@ -392,6 +392,119 @@ resource "aws_iam_role_policy_attachment" "ecr_scoped" {
   policy_arn = aws_iam_policy.ecr_scoped.arn
 }
 
+# Queue alerting (27-queue-alarms.tf in the ASTRA repo): CloudWatch alarms ->
+# SNS -> Lambda -> Discord, plus the secret holding the webhook URL. A managed
+# policy rather than another inline one: this role's inline policies already
+# total about 9.5 KB of the 10,240-character limit, so a new inline policy of
+# this size would fail to apply. Every resource is scoped to the astra-* names
+# the stack creates.
+resource "aws_iam_policy" "alerting_scoped" {
+  name        = "${var.github_oidc_role_name}-alerting"
+  description = "SNS topic, Lambda function, CloudWatch alarms, log group and webhook secret for queue alerting"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "SnsTopicManage"
+        Effect = "Allow"
+        Action = [
+          "sns:CreateTopic",
+          "sns:DeleteTopic",
+          "sns:GetTopicAttributes",
+          "sns:SetTopicAttributes",
+          "sns:ListTagsForResource",
+          "sns:TagResource",
+          "sns:UntagResource",
+          "sns:Subscribe",
+          "sns:Unsubscribe",
+          "sns:GetSubscriptionAttributes",
+          "sns:SetSubscriptionAttributes",
+        ]
+        Resource = "arn:aws:sns:*:*:astra-*"
+      },
+      {
+        Sid    = "LambdaFunctionManage"
+        Effect = "Allow"
+        Action = [
+          "lambda:CreateFunction",
+          "lambda:DeleteFunction",
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
+          "lambda:GetFunctionCodeSigningConfig",
+          "lambda:UpdateFunctionCode",
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:ListVersionsByFunction",
+          "lambda:GetPolicy",
+          "lambda:AddPermission",
+          "lambda:RemovePermission",
+          "lambda:ListTags",
+          "lambda:TagResource",
+          "lambda:UntagResource",
+        ]
+        Resource = "arn:aws:lambda:*:*:function:astra-*"
+      },
+      {
+        Sid    = "CloudWatchAlarmManage"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricAlarm",
+          "cloudwatch:DeleteAlarms",
+          "cloudwatch:ListTagsForResource",
+          "cloudwatch:TagResource",
+          "cloudwatch:UntagResource",
+        ]
+        Resource = "arn:aws:cloudwatch:*:*:alarm:astra-*"
+      },
+      {
+        # DescribeAlarms and DescribeLogGroups do not support resource scoping.
+        Sid      = "AlarmAndLogDescribe"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:DescribeAlarms", "logs:DescribeLogGroups"]
+        Resource = "*"
+      },
+      {
+        Sid    = "LambdaLogGroupManage"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:DeleteLogGroup",
+          "logs:PutRetentionPolicy",
+          "logs:DeleteRetentionPolicy",
+          "logs:ListTagsForResource",
+          "logs:ListTagsLogGroup",
+          "logs:TagResource",
+          "logs:UntagResource",
+          "logs:TagLogGroup",
+          "logs:UntagLogGroup",
+        ]
+        Resource = [
+          "arn:aws:logs:*:*:log-group:/aws/lambda/astra-*",
+          "arn:aws:logs:*:*:log-group:/aws/lambda/astra-*:*",
+        ]
+      },
+      {
+        Sid    = "WebhookSecretManage"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:CreateSecret",
+          "secretsmanager:DeleteSecret",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:GetResourcePolicy",
+          "secretsmanager:TagResource",
+          "secretsmanager:UntagResource",
+        ]
+        Resource = "arn:aws:secretsmanager:*:*:secret:astra-*"
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "alerting_scoped" {
+  role       = aws_iam_role.github_oidc.name
+  policy_arn = aws_iam_policy.alerting_scoped.arn
+}
+
 # RDS instance/subnet-group management for the stack's MySQL database,
 # plus read access to the Secrets Manager secret that RDS auto-creates
 # when manage_master_user_password is enabled (Terraform reads it back

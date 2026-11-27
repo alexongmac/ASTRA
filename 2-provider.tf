@@ -48,6 +48,11 @@ terraform {
       source  = "hashicorp/time"
       version = "~> 0.13"
     }
+    # Zips the queue-alert Lambda source (27-queue-alarms.tf).
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 
   # Partial backend config: bucket/region/use_lockfile are fixed, but `key`
