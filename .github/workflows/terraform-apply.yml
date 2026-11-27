@@ -23,6 +23,10 @@ jobs:
   plan:
     runs-on: ubuntu-latest
 
+    # The reviewed plan's fingerprint, checked by the apply job (see there).
+    outputs:
+      plan_digest: ${{ steps.plan.outputs.digest }}
+
     env:
       ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
 
@@ -50,8 +54,12 @@ jobs:
           role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      # No wrapper: it adds its own lines to stdout, which would corrupt the
+      # plan text that is fingerprinted below.
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
@@ -80,8 +88,17 @@ jobs:
         with:
           args: --severity-threshold=high
 
+      # The plan file itself stays on this runner: plan files can hold secrets
+      # in plain text (the IoT device key, the database password), and this
+      # repository is public, so it must never be uploaded as an artifact.
+      # Only a fingerprint of the readable plan - where sensitive values are
+      # masked - is passed on to the apply job.
       - name: Terraform Plan
-        run: terraform plan -var-file="envs/${ENVIRONMENT}.tfvars"
+        id: plan
+        run: |
+          terraform plan -input=false -out=tfplan -var-file="envs/${ENVIRONMENT}.tfvars"
+          terraform show -no-color tfplan > plan.txt
+          echo "digest=$(sha256sum plan.txt | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
   snyk-scans:
     runs-on: ubuntu-latest
@@ -127,11 +144,36 @@ jobs:
           role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      # No wrapper: it adds its own lines to stdout, which would corrupt the
+      # plan text that is fingerprinted below.
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Terraform Init
         run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
 
+      # Apply exactly what was reviewed. This job plans again, saves that plan,
+      # and refuses to continue unless its fingerprint matches the plan job's.
+      # If anything changed in between (a laptop apply, the 6am sweep, a
+      # change made by hand, another run), the plans differ and nothing is
+      # applied: re-run the workflow to review the new plan. When they match,
+      # the saved file is applied as it is, so apply cannot do more than the
+      # reviewed plan showed.
+      - name: Check the plan still matches the reviewed one
+        env:
+          REVIEWED_DIGEST: ${{ needs.plan.outputs.plan_digest }}
+        run: |
+          terraform plan -input=false -out=tfplan -var-file="envs/${ENVIRONMENT}.tfvars"
+          terraform show -no-color tfplan > plan.txt
+          CURRENT_DIGEST="$(sha256sum plan.txt | cut -d' ' -f1)"
+          if [ -z "$REVIEWED_DIGEST" ] || [ "$CURRENT_DIGEST" != "$REVIEWED_DIGEST" ]; then
+            echo "::error::The plan has changed since it was reviewed, so nothing was applied. Re-run this workflow to review the new plan."
+            cat plan.txt
+            exit 1
+          fi
+          echo "Plan matches the reviewed plan ($CURRENT_DIGEST)."
+
       - name: Terraform Apply
-        run: terraform apply -auto-approve -var-file="envs/${ENVIRONMENT}.tfvars"
+        run: terraform apply -input=false tfplan
