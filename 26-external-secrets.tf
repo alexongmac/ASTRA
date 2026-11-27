@@ -20,7 +20,11 @@ data "aws_iam_policy_document" "external_secrets" {
       "secretsmanager:GetSecretValue",
       "secretsmanager:DescribeSecret",
     ]
-    resources = [aws_db_instance.mysql.master_user_secret[0].secret_arn]
+    resources = [
+      aws_db_instance.mysql.master_user_secret[0].secret_arn,
+      # The astra_app login the application actually uses (28-db-app-user.tf).
+      aws_secretsmanager_secret.db_app_credentials.arn,
+    ]
   }
 }
 
