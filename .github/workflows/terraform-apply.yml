@@ -25,9 +25,11 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
 
-    # One Terraform run at a time PER ENVIRONMENT (state locking is disabled
-    # in the backend, and each env has its own state key) - a develop push
-    # and a main push must never block each other.
+    # One Terraform run at a time PER ENVIRONMENT, queued rather than failed.
+    # The S3 state lock (use_lockfile in 2-provider.tf) is the real guard and
+    # also covers runs outside this workflow; this queue just stops a second
+    # push from failing on the lock. Each env has its own state key, so a
+    # develop push and a main push never block each other.
     concurrency:
       group: terraform-state-${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
       cancel-in-progress: false

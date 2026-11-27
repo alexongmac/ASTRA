@@ -63,9 +63,19 @@ terraform {
   backend "s3" {
     bucket = "sctp-tfstate-ce13"
     region = "us-east-1"
-    # S3 lockfiles disabled: bucket policy denies s3:DeleteObject for students,
-    # so Terraform can create the .tflock but never release it.
-    use_lockfile = false
+    # State locking: while a run is in progress Terraform keeps an
+    # astra/<env>.tfstate.tflock object, so a second run waits instead of
+    # overwriting the state. The pipeline role may delete *.tflock objects
+    # (github-oidc-bootstrap, state_lock policy), so it releases its locks.
+    #
+    # The shared bucket's policy denies every delete to IAM users under
+    # students/, so a laptop can take a lock but never release it. Therefore:
+    #   - apply only through the pipeline (push, or "Run workflow" in
+    #     .github/workflows/terraform-apply.yml);
+    #   - plan locally with `terraform plan -lock=false` (read-only, safe);
+    #   - if a lock is ever left behind, run the "Terraform Force Unlock"
+    #     workflow with the lock ID from the error message.
+    use_lockfile = true
   }
 
   required_version = ">= 1.9"
