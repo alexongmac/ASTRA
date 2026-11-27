@@ -76,7 +76,7 @@ export async function KeyValues({ machine, from, to }: { machine: string | null;
       </div>
       <div className="mt-3">
         {points.length > 0 ? (
-          <KeyValuesChart points={points} />
+          <KeyValuesChart points={points} windowFrom={from.getTime()} windowTo={to.getTime()} />
         ) : (
           <p className="text-xs text-slate-500">No OEE data for {machine} in this shift.</p>
         )}
