@@ -15,8 +15,8 @@ export const HANDOVER_STATUS_STYLES: Record<string, string> = {
   Rejected: "text-red-500",
 };
 
-// The operator logs that may be attached: the SHIFT_HOURS before the handover
-// started (the shift being handed over).
+// The shift being handed over: the SHIFT_HOURS before the handover started.
+// Used for the Key Values graph. Attaching operator logs is not limited by it.
 export function shiftWindow(start: Date) {
   return { from: new Date(start.getTime() - SHIFT_HOURS * 3_600_000), to: start };
 }

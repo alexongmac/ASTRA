@@ -38,12 +38,14 @@ export default async function HandoverPage({ params }: { params: Promise<{ id: s
   const editable = isEditable(handover.status) && role.canEdit;
   const window = shiftWindow(handover.startTime);
 
+  // Any operator-log entry can be attached, from any time; the list shows the
+  // newest first. The cap only keeps the page responsive.
   const linkedIds = handover.logs.map((l) => l.logId);
   const eligible = editable
     ? await prisma.operatorLog.findMany({
-        where: { eventTime: { gte: window.from, lte: window.to }, id: { notIn: linkedIds } },
+        where: { id: { notIn: linkedIds } },
         orderBy: { eventTime: "desc" },
-        take: 100,
+        take: 500,
         include: { createdBy: true },
       })
     : [];

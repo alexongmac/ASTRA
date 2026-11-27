@@ -6,7 +6,6 @@ import { BTN_SECONDARY } from "./field-styles";
 import { Section } from "./handover-section";
 import { LocalTime } from "./local-time";
 import { LOG_PRIORITY_STYLES, LOG_STATUS_STYLES } from "@/lib/operator-logs";
-import { SHIFT_HOURS } from "@/lib/shift-handover";
 
 export type HandoverLogRow = {
   id: string;
@@ -44,8 +43,8 @@ function Cells({ log }: { log: HandoverLogRow }) {
 
 const HEAD = ["Event Time", "Area", "Machine", "Category", "Priority", "Author", "Message", "Status"];
 
-// Operator-log entries attached to the handover. "+" lists the entries from the
-// shift being handed over (the SHIFT_HOURS before the handover started).
+// Operator-log entries attached to the handover. "+" lists every entry not yet
+// attached, newest first, whatever its event time.
 export function HandoverLogs({
   handoverId,
   logs,
@@ -144,9 +143,7 @@ export function HandoverLogs({
 
           {open ? (
             <div className="mt-3 rounded border border-slate-700 bg-slate-900 p-3">
-              <p className="mb-2 text-xs text-slate-400">
-                Only logs from the {SHIFT_HOURS} hours before the handover started can be added.
-              </p>
+              <p className="mb-2 text-xs text-slate-400">Newest first. Any log entry can be added.</p>
               <table className="w-full text-left text-xs">
                 <thead className="text-blue-400">
                   <tr>
