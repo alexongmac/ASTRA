@@ -1,6 +1,6 @@
 # External Secrets Operator (installed by Argo CD from the ASTRA_argocd repo)
-# copies the RDS-managed master credentials from Secrets Manager into a
-# Kubernetes Secret, so a password rotation no longer needs a manual edit.
+# copies the astra_app database login from Secrets Manager into a Kubernetes
+# Secret, so a password rotation (29-db-app-rotation.tf) needs no manual edit.
 #
 # Only the IAM side lives here. The operator's controller pod gets this role
 # through EKS Pod Identity, bound to the "external-secrets" service account in
@@ -12,7 +12,8 @@ resource "aws_iam_role" "external_secrets" {
   assume_role_policy = data.aws_iam_policy_document.web_app_pod_identity_assume.json
 }
 
-# Read-only and scoped to the one secret it exists to sync.
+# Read-only, and only the secrets it can be asked to sync: the astra_app login
+# the app uses, and the RDS master secret (kept for rolling the app back to it).
 data "aws_iam_policy_document" "external_secrets" {
   statement {
     effect = "Allow"
@@ -28,10 +29,17 @@ data "aws_iam_policy_document" "external_secrets" {
   }
 }
 
-resource "aws_iam_role_policy" "external_secrets" {
-  name   = "${local.eks_name}-external-secrets-policy"
-  role   = aws_iam_role.external_secrets.id
+# A customer-managed policy rather than an inline one: it can carry the project
+# tags, and the shared sandbox's daily sweep strips untaggable inline policies,
+# which would leave External Secrets unable to read the login.
+resource "aws_iam_policy" "external_secrets" {
+  name   = "${local.eks_name}-external-secrets"
   policy = data.aws_iam_policy_document.external_secrets.json
+}
+
+resource "aws_iam_role_policy_attachment" "external_secrets" {
+  role       = aws_iam_role.external_secrets.name
+  policy_arn = aws_iam_policy.external_secrets.arn
 }
 
 resource "aws_eks_pod_identity_association" "external_secrets" {

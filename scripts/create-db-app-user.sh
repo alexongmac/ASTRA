@@ -20,7 +20,9 @@
 # This is for the first creation, or to recover by hand. Once
 # 29-db-app-rotation.tf is applied, Secrets Manager rotates this password every
 # month on its own; if a rotation is ever left half-done (the secret no longer
-# matches MySQL), re-running this script puts them back in step.
+# matches MySQL), re-running this script puts them back in step. The rotation
+# alternates between astra_app and astra_app_clone; this script always resets and
+# stores astra_app, so after it runs the secret names astra_app again.
 #
 # Usage: scripts/create-db-app-user.sh
 set -euo pipefail
