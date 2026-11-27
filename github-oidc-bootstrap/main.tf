@@ -508,6 +508,34 @@ resource "aws_iam_role_policy_attachment" "alerting_scoped" {
   policy_arn = aws_iam_policy.alerting_scoped.arn
 }
 
+# Terraform state locking (use_lockfile in 2-provider.tf). Terraform writes a
+# <state key>.tflock object next to the state while it runs and deletes it when
+# it finishes, so the pipeline needs DeleteObject - but only on lock files,
+# never on the state files themselves. The shared bucket's own policy still
+# denies every delete to IAM users under students/, which is why locked runs
+# must go through this pipeline and not a laptop.
+resource "aws_iam_policy" "state_lock" {
+  name        = "${var.github_oidc_role_name}-state-lock"
+  description = "Release Terraform state locks (delete *.tflock only) in the shared state bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "TerraformStateLockRelease"
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = "arn:aws:s3:::sctp-tfstate-ce13/astra/*.tflock"
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "state_lock" {
+  role       = aws_iam_role.github_oidc.name
+  policy_arn = aws_iam_policy.state_lock.arn
+}
+
 # RDS instance/subnet-group management for the stack's MySQL database,
 # plus read access to the Secrets Manager secret that RDS auto-creates
 # when manage_master_user_password is enabled (Terraform reads it back

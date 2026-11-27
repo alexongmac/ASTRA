@@ -1,0 +1,61 @@
+name: Terraform Force Unlock
+
+# Releases a stuck Terraform state lock. Needed only if a run was killed
+# mid-way, or if someone ran `terraform apply` or `terraform plan` from a laptop
+# with locking on: a student IAM user can create the lock file but the shared
+# bucket's policy will not let it delete it, so the lock stays and every
+# pipeline run then stops with "Error acquiring the state lock".
+#
+# Use: Actions > Terraform Force Unlock > Run workflow, on the branch of the
+# locked environment (develop = development, main = production), and paste the
+# lock ID from that error message. Production waits for the same approval as a
+# production apply.
+#
+# Only unlock when you are sure nothing else is running against that state.
+
+on:
+  workflow_dispatch:
+    inputs:
+      lock_id:
+        description: "Lock ID from the 'Error acquiring the state lock' message"
+        required: true
+        type: string
+
+permissions:
+  id-token: write # Required for OIDC
+  contents: read
+
+jobs:
+  unlock:
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+
+    env:
+      ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+      # Passed through the environment, not pasted into the script, so the
+      # input cannot inject shell commands.
+      LOCK_ID: ${{ inputs.lock_id }}
+
+    # Same queue as terraform-apply.yml, so this never runs alongside an apply.
+    concurrency:
+      group: terraform-state-${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init -backend-config="key=astra/${ENVIRONMENT}.tfstate"
+
+      - name: Terraform Force Unlock
+        run: terraform force-unlock -force "$LOCK_ID"

@@ -8,6 +8,11 @@ on:
       - "github-oidc-bootstrap/**.tf"
       - "envs/**.tfvars"
       - ".github/workflows/terraform-apply.yml"
+  # "Run workflow" in the Actions tab, on the branch of the environment to fix.
+  # This is how to re-apply after the sandbox's daily 6am sweep without a push,
+  # and without applying from a laptop (which cannot release the state lock -
+  # see use_lockfile in 2-provider.tf).
+  workflow_dispatch:
 
 permissions:
   id-token: write # Required for OIDC
