@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # OIDC_ROLE differs per environment and isn't an Environment-scoped
       # variable here: a job's `environment:` gates it on that Environment's
@@ -49,7 +49,7 @@ jobs:
       # diff before deciding whether to approve `apply`. So each env's role
       # ARN is its own repo-level variable, selected by branch instead.
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -57,7 +57,7 @@ jobs:
       # No wrapper: it adds its own lines to stdout, which would corrupt the
       # plan text that is fingerprinted below.
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
 
@@ -70,7 +70,7 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      - uses: terraform-linters/setup-tflint@v4
+      - uses: terraform-linters/setup-tflint@v6
         with:
           tflint_version: latest
 
@@ -105,7 +105,7 @@ jobs:
     needs: plan
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Snyk CLI
         uses: snyk/actions/setup@master
@@ -136,10 +136,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ github.ref == 'refs/heads/main' && vars.OIDC_ROLE_PRODUCTION || vars.OIDC_ROLE_DEVELOPMENT }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -147,7 +147,7 @@ jobs:
       # No wrapper: it adds its own lines to stdout, which would corrupt the
       # plan text that is fingerprinted below.
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
 
