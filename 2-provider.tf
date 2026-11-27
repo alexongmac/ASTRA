@@ -75,6 +75,13 @@ terraform {
     #   - plan locally with `terraform plan -lock=false` (read-only, safe);
     #   - if a lock is ever left behind, run the "Terraform Force Unlock"
     #     workflow with the lock ID from the error message.
+    #
+    # One exception: the sandbox's daily 6am sweep also strips the pipeline
+    # role's own policies and policy attachments, so on those mornings the
+    # pipeline cannot run until they are restored. Recover from a laptop with
+    #   terraform apply -lock=false -var-file=envs/development.tfvars
+    # only after checking that no pipeline run is in progress. That is the
+    # only time a laptop apply is expected.
     use_lockfile = true
   }
 

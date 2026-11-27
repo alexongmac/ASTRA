@@ -8,10 +8,11 @@ on:
       - "github-oidc-bootstrap/**.tf"
       - "envs/**.tfvars"
       - ".github/workflows/terraform-apply.yml"
-  # "Run workflow" in the Actions tab, on the branch of the environment to fix.
-  # This is how to re-apply after the sandbox's daily 6am sweep without a push,
-  # and without applying from a laptop (which cannot release the state lock -
-  # see use_lockfile in 2-provider.tf).
+  # "Run workflow" in the Actions tab, on the branch of the environment to fix:
+  # re-applies without a push, and without applying from a laptop (which cannot
+  # release the state lock - see use_lockfile in 2-provider.tf). It cannot fix
+  # a morning when the 6am sweep has stripped this pipeline's own role
+  # policies; 2-provider.tf describes the laptop recovery for that case.
   workflow_dispatch:
 
 permissions:
