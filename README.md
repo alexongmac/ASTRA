@@ -525,3 +525,10 @@ kubectl logs -n monitoring -l app.kubernetes.io/name=promtail --tail=200 \
 
 kubectl -n argocd annotate app web-app-development argocd.argoproj.io/refresh=hard --overwrite
 kubectl -n web-app rollout status deploy/astra-web-app
+
+### self-healing test
+
+Self-healing (about 1 minute): delete one web-app pod and watch Kubernetes replace it while the site keeps working.
+
+kubectl delete pod -n web-app <one astra-web-app pod>
+kubectl get pods -n web-app -w
